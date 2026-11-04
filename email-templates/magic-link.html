@@ -1,0 +1,23 @@
+<!-- Paste into Supabase → Authentication → Emails → "Magic Link" template.
+     Subject suggestion:  Your Finstack Turf login link 🏏
+     This same template is used for new-member invites and for "Email me a login link". -->
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#090e18;padding:32px 0;font-family:Arial,Helvetica,sans-serif;">
+  <tr><td align="center">
+    <table width="520" cellpadding="0" cellspacing="0" style="background:#111a29;border:1px solid #263247;border-radius:14px;padding:32px;color:#edf3fb;">
+      <tr><td style="font-size:13px;letter-spacing:2px;color:#b8f36b;font-weight:bold;padding-bottom:18px;">FINSTACK TURF</td></tr>
+      <tr><td style="font-size:24px;font-weight:bold;padding-bottom:10px;">You're in the squad 🏏</td></tr>
+      <tr><td style="font-size:15px;line-height:1.6;color:#aab8c9;padding-bottom:24px;">
+        Hi {{ .Data.full_name }},<br><br>
+        You've been added to the Finstack Turf club app — the place where we track match costs, attendance and your Kiddy Bank wallet.
+        Tap the button to open the app and sign in. You'll be asked to set a password the first time.
+      </td></tr>
+      <tr><td align="center" style="padding-bottom:24px;">
+        <a href="{{ .ConfirmationURL }}" style="background:#b8f36b;color:#14200d;text-decoration:none;font-weight:bold;font-size:15px;padding:14px 28px;border-radius:9px;display:inline-block;">Open Finstack Turf →</a>
+      </td></tr>
+      <tr><td style="font-size:12px;line-height:1.6;color:#6f7e92;">
+        This link works once and expires in an hour. If it has expired, open the app, enter your email and click <b>“Email me a login link”</b> to get a new one.<br>
+        If you weren't expecting this email you can ignore it.
+      </td></tr>
+    </table>
+  </td></tr>
+</table>

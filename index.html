@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#090e18">
+  <title>Finstack Turf — Kiddy Bank</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <div id="toast" class="toast" role="status"></div>
+
+  <!-- ============================ AUTH ============================ -->
+  <section id="authView" class="auth-shell">
+    <div class="auth-art">
+      <div class="brand"><span class="brand-mark">F</span><span>FINSTACK <b>TURF</b></span></div>
+      <div class="auth-copy">
+        <span class="eyebrow">YOUR GAME. YOUR CREW. YOUR BANK.</span>
+        <h1>Play together.<br><em>Settle smarter.</em></h1>
+        <p>One place for match costs, player attendance and every rupee in your Kiddy Bank.</p>
+        <div class="auth-stats"><div><b>24</b><span>TEAM MEMBERS</span></div><div><b>₹500</b><span>STANDARD TOP-UP</span></div><div><b>100%</b><span>TRANSPARENT</span></div></div>
+      </div>
+      <div class="pitch-lines"></div>
+    </div>
+    <div class="auth-panel">
+      <div class="auth-mobile-brand brand"><span class="brand-mark">F</span><span>FINSTACK <b>TURF</b></span></div>
+      <div class="auth-card">
+        <div class="tabs"><button class="tab active" data-auth-tab="login">Sign in</button><button class="tab" data-auth-tab="signup">Create account</button></div>
+        <div id="loginForm">
+          <span class="eyebrow">WELCOME BACK</span><h2>Get in the game.</h2>
+          <p class="muted">Sign in to view your wallet and matches.</p>
+          <form id="signInForm">
+            <label>Email address<input type="email" id="loginEmail" autocomplete="email" required placeholder="you@example.com"></label>
+            <label>Password<input type="password" id="loginPassword" autocomplete="current-password" required placeholder="Your password"></label>
+            <button class="btn primary full" type="submit">Sign in <span>→</span></button>
+          </form>
+          <div class="auth-links"><button class="text-btn auth-link" id="magicBtn" type="button">✉ Email me a login link</button><button class="text-btn auth-link" id="forgotBtn" type="button">Forgot password?</button></div>
+        </div>
+        <div id="signupForm" class="hidden">
+          <span class="eyebrow">JOIN THE SQUAD</span><h2>Create your account.</h2>
+          <p class="muted">Use the same email the admin added you with and you'll be approved automatically.</p>
+          <form id="registerForm">
+            <label>Full name<input id="registerName" required maxlength="80" placeholder="Your name"></label>
+            <label>Email address<input type="email" id="registerEmail" required placeholder="you@example.com"></label>
+            <label>Password<input type="password" id="registerPassword" required minlength="8" placeholder="At least 8 characters"></label>
+            <button class="btn primary full" type="submit">Create account <span>→</span></button>
+          </form>
+        </div>
+        <p class="auth-foot">Access is private to registered Finstack Turf members.</p>
+      </div>
+      <div class="auth-config-note" id="configNote">Connect your Supabase project to activate sign in.</div>
+    </div>
+  </section>
+
+  <!-- ============================ APP ============================ -->
+  <div id="appView" class="app hidden">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand"><span class="brand-mark">F</span><span>FINSTACK <b>TURF</b></span></div>
+      <div class="club-chip"><span class="live-dot"></span> PRIVATE TEAM SPACE</div>
+      <nav class="nav">
+        <button class="nav-link active" data-page="overview"><span>◫</span> Overview</button>
+        <button class="nav-link admin-only" data-page="members"><span>♙</span> Members</button>
+        <button class="nav-link" data-page="wallet"><span>◈</span> Kiddy Bank</button>
+        <button class="nav-link" data-page="deposits"><span>↧</span> Deposits <em id="navDepositBadge" class="nav-badge hidden">0</em></button>
+        <button class="nav-link" data-page="matches"><span>🏏</span> Matches</button>
+        <button class="nav-link admin-only" data-page="reports"><span>▥</span> Reports</button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="help-card"><span class="help-icon">✦</span><b>Keep it fair.</b><p>Every match settlement is recorded in the wallet ledger.</p></div>
+        <button id="signOutBtn" class="nav-link signout"><span>↪</span> Sign out</button>
+      </div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <button id="menuToggle" class="icon-btn mobile-only" aria-label="Open menu">☰</button>
+        <div><div class="eyebrow" id="pageEyebrow">TEAM CONTROL CENTER</div><h1 id="pageTitle">Overview</h1></div>
+        <div class="top-user"><div class="top-user-copy"><b id="topUserName">Player</b><span id="topUserRole">MEMBER</span></div><div class="avatar" id="topAvatar">P</div></div>
+      </header>
+
+      <!-- Overview -->
+      <section id="page-overview" class="page active">
+        <div class="welcome-row"><div><span class="eyebrow">THE CREW IS READY</span><h2>Good game starts <em>here.</em></h2><p class="muted">Your club finances, at a glance.</p></div><div class="date-pill" id="todayLabel"></div></div>
+        <div class="metric-grid">
+          <article class="metric-card accent"><div class="metric-top"><span>MY WALLET</span><span class="metric-icon">◈</span></div><strong id="myBalance">₹0.00</strong><small>Available Kiddy Bank balance</small></article>
+          <article class="metric-card"><div class="metric-top"><span>MY MATCHES</span><span class="metric-icon">🏏</span></div><strong id="myMatches">0</strong><small>Matches attended</small></article>
+          <article class="metric-card admin-only"><div class="metric-top"><span>CLUB WALLET TOTAL</span><span class="metric-icon">₹</span></div><strong id="clubBalance">₹0.00</strong><small>Combined member balances</small></article>
+          <article class="metric-card admin-only"><div class="metric-top"><span>PENDING DEPOSITS</span><span class="metric-icon">↧</span></div><strong id="pendingDeposits">0</strong><small id="pendingDepositsHint">Requests waiting for your review</small></article>
+          <article class="metric-card member-only"><div class="metric-top"><span>MY SPEND</span><span class="metric-icon">₹</span></div><strong id="mySpend">₹0.00</strong><small>Total charged for matches</small></article>
+          <article class="metric-card member-only"><div class="metric-top"><span>MY REQUESTS</span><span class="metric-icon">↧</span></div><strong id="myPendingDeposits">0</strong><small>Deposit requests pending approval</small></article>
+        </div>
+        <div class="content-grid">
+          <article class="panel"><div class="panel-head"><div><span class="eyebrow">LATEST ACTIVITY</span><h3>Recent wallet activity</h3></div><button class="text-btn" data-goto="wallet">View ledger →</button></div><div id="overviewTransactions" class="table-wrap"><div class="empty">No transactions yet.</div></div></article>
+          <article class="panel"><div class="panel-head"><div><span class="eyebrow">RECENT GAMES</span><h3>Recent matches</h3></div><button class="text-btn" data-goto="matches">All matches →</button></div><div id="overviewMatches" class="mini-list"><div class="empty">No matches recorded yet.</div></div></article>
+        </div>
+      </section>
+
+      <!-- Members (admin) -->
+      <section id="page-members" class="page">
+        <div class="section-intro"><div><span class="eyebrow">THE SQUAD</span><h2>Member management</h2><p class="muted">Add players directly, approve signups and keep wallets topped up.</p></div><div class="btn-row"><button class="btn ghost" id="recordDepositBtn">₹ Record deposit</button><button class="btn primary" id="addMemberBtn">＋ Add member</button></div></div>
+        <div class="metric-grid compact"><article class="metric-card"><span class="metric-label">ACTIVE MEMBERS</span><strong id="approvedCount">0</strong></article><article class="metric-card"><span class="metric-label">PENDING APPROVAL</span><strong id="pendingCount">0</strong></article><article class="metric-card"><span class="metric-label">TOTAL BALANCE</span><strong id="membersBalance">₹0.00</strong></article></div>
+        <article class="panel"><div class="panel-head"><div><span class="eyebrow">PLAYER DIRECTORY</span><h3>All members</h3></div><div class="btn-row"><label class="inline-check"><input type="checkbox" id="showInactive"> Show inactive</label><button class="text-btn" id="refreshMembers">↻ Refresh</button></div></div><div id="membersTable" class="table-wrap"><div class="empty">Loading members…</div></div></article>
+      </section>
+
+      <!-- Wallet -->
+      <section id="page-wallet" class="page">
+        <div class="section-intro"><div><span class="eyebrow">KIDDY BANK</span><h2>Your money, clearly tracked.</h2><p class="muted">Every top-up, match charge and adjustment has a ledger entry.</p></div><div class="btn-row"><button class="btn ghost" id="refreshWallet">↻ Refresh</button><button class="btn primary" data-goto="deposits">↧ Request deposit</button></div></div>
+        <div class="wallet-hero"><div><span class="eyebrow">AVAILABLE BALANCE</span><div class="wallet-amount" id="walletBalance">₹0.00</div><p>Only admin-confirmed transactions can add or deduct funds.</p></div><div class="wallet-symbol">₹</div></div>
+        <article class="panel"><div class="panel-head"><div><span class="eyebrow">ACCOUNT STATEMENT</span><h3 id="walletTitle">Wallet transactions</h3></div><select id="walletFilter" class="select-sm admin-only"><option value="">All members</option></select></div><div id="walletTable" class="table-wrap"><div class="empty">Loading ledger…</div></div></article>
+      </section>
+
+      <!-- Deposits -->
+      <section id="page-deposits" class="page">
+        <div class="section-intro"><div><span class="eyebrow">TOP-UPS</span><h2 id="depositsTitle">Deposit requests</h2><p class="muted" id="depositsHint">Paid the admin via UPI or cash? Record it here and it will be credited once the admin confirms.</p></div><button class="btn ghost" id="refreshDeposits">↻ Refresh</button></div>
+        <div class="content-grid deposits-grid">
+          <article class="panel admin-only" id="pendingPanel"><div class="panel-head"><div><span class="eyebrow">NEEDS YOUR REVIEW</span><h3>Pending requests</h3></div><span class="status pending" id="pendingPanelCount">0 PENDING</span></div><div id="pendingTable" class="table-wrap"><div class="empty">No pending requests.</div></div></article>
+          <article class="panel" id="requestPanel"><div class="panel-head"><div><span class="eyebrow">I HAVE PAID</span><h3>Submit a deposit request</h3></div></div>
+            <form id="requestForm">
+              <div class="form-grid">
+                <label>Amount (₹)<input id="reqAmount" type="number" min="1" step="0.01" value="500" required></label>
+                <label>Paid via<select id="reqMethod"><option value="upi">UPI</option><option value="cash">Cash</option><option value="bank">Bank transfer</option><option value="other">Other</option></select></label>
+              </div>
+              <label>Transaction reference / UPI ID<input id="reqReference" maxlength="80" placeholder="e.g. UPI ref 4321 9876"></label>
+              <label>Note<input id="reqNote" maxlength="160" placeholder="Optional — e.g. paid to Naveen on Monday"></label>
+              <button class="btn primary" type="submit">Submit request</button>
+            </form>
+          </article>
+          <article class="panel" id="historyPanel"><div class="panel-head"><div><span class="eyebrow">HISTORY</span><h3 id="historyTitle">My deposit requests</h3></div></div><div id="historyTable" class="table-wrap"><div class="empty">No requests yet.</div></div></article>
+        </div>
+      </section>
+
+      <!-- Matches -->
+      <section id="page-matches" class="page">
+        <div class="section-intro"><div><span class="eyebrow">MATCH CENTER</span><h2>Matches & attendance</h2><p class="muted">Create a match, mark who played, then settle the turf bill.</p></div><button class="btn primary admin-only" id="newMatchBtn">＋ New match</button></div>
+        <div id="matchList" class="match-grid"><div class="empty">Loading matches…</div></div>
+      </section>
+
+      <!-- Reports (admin) -->
+      <section id="page-reports" class="page">
+        <div class="section-intro"><div><span class="eyebrow">CLUB INSIGHTS</span><h2>Reports & exports</h2><p class="muted">A transparent view of club collections and match expenses.</p></div><div class="btn-row"><button class="btn ghost" id="exportLedgerCsv">↓ Ledger CSV</button><button class="btn primary" id="exportCsv">↓ Summary CSV</button></div></div>
+        <div class="metric-grid compact"><article class="metric-card"><span class="metric-label">TOTAL DEPOSITS</span><strong id="reportDeposits">₹0.00</strong></article><article class="metric-card"><span class="metric-label">MATCH EXPENSES (SETTLED)</span><strong id="reportExpenses">₹0.00</strong></article><article class="metric-card"><span class="metric-label">MATCHES PLAYED</span><strong id="reportMatches">0</strong></article></div>
+        <article class="panel"><div class="panel-head"><div><span class="eyebrow">PLAYER SUMMARY</span><h3>Contribution overview</h3></div></div><div id="reportTable" class="table-wrap"></div></article>
+      </section>
+      <footer class="footer">FINSTACK TURF <span>•</span> PLAY FAIR. SPLIT FAIR.</footer>
+    </main>
+  </div>
+
+  <!-- ============================ DIALOGS ============================ -->
+  <dialog id="memberDialog" class="modal"><form id="memberForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">THE SQUAD</span><h3 id="memberDialogTitle">Add a member</h3></div><button class="icon-btn" type="button" data-close="memberDialog">×</button></div><input type="hidden" id="memberId"><label>Full name<input id="memberName" required maxlength="80" placeholder="Player name"></label><label>Email (used to link their login)<input id="memberEmail" type="email" maxlength="120" placeholder="player@example.com"></label><label>Phone<input id="memberPhone" maxlength="20" placeholder="Optional"></label><div class="form-grid edit-only"><label>Role<select id="memberRole"><option value="member">Member</option><option value="admin">Admin</option></select></label><label>Status<select id="memberActive"><option value="true">Active</option><option value="false">Inactive</option></select></label></div><label class="inline-check add-only"><input type="checkbox" id="memberInvite" checked> Email them an invite link now</label><p class="hint" id="memberHint">The member can sign up later with this email and will be linked and approved automatically.</p><div class="modal-actions"><button type="button" class="btn ghost" data-close="memberDialog">Cancel</button><button class="btn primary" type="submit" id="memberSubmit">Add member</button></div></form></dialog>
+
+  <dialog id="depositDialog" class="modal"><form id="depositForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">KIDDY BANK</span><h3>Record a deposit</h3></div><button class="icon-btn" type="button" data-close="depositDialog">×</button></div><label>Member<select id="depositMember" required></select></label><label>Amount (₹)<input id="depositAmount" type="number" min="1" step="0.01" value="500" required></label><label>Note<input id="depositNote" maxlength="160" placeholder="UPI received / cash"></label><div class="modal-actions"><button type="button" class="btn ghost" data-close="depositDialog">Cancel</button><button class="btn primary" type="submit">Add deposit</button></div></form></dialog>
+
+  <dialog id="adjustDialog" class="modal"><form id="adjustForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">ADMIN ACTION</span><h3 id="adjustTitle">Wallet adjustment</h3></div><button class="icon-btn" type="button" data-close="adjustDialog">×</button></div><input type="hidden" id="adjustMemberId"><label>Adjustment type<select id="adjustType"><option value="deposit">Deposit / top-up</option><option value="credit">Refund / credit</option><option value="debit">Manual deduction</option></select></label><label>Amount (₹)<input id="adjustAmount" type="number" min="0.01" step="0.01" required></label><label>Reason<input id="adjustReason" maxlength="160" required placeholder="UPI received / correction"></label><div class="modal-actions"><button type="button" class="btn ghost" data-close="adjustDialog">Cancel</button><button class="btn primary" type="submit">Save adjustment</button></div></form></dialog>
+
+  <dialog id="matchDialog" class="modal wide"><form id="matchForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">MATCH SETUP</span><h3 id="matchDialogTitle">Create a turf match</h3></div><button class="icon-btn" type="button" data-close="matchDialog">×</button></div><input type="hidden" id="matchId"><div class="form-grid"><label>Match date<input id="matchDate" type="date" required></label><label>Turf / venue<input id="matchVenue" maxlength="120" placeholder="Finstack Turf" required></label><label>Booking cost (₹)<input id="matchCost" type="number" min="0.01" step="0.01" required placeholder="1200"></label><label>Additional expenses (₹)<input id="extraCost" type="number" min="0" step="0.01" value="0"></label></div><label>Notes<input id="matchNotes" maxlength="250" placeholder="Optional notes"></label><div class="attendance-head"><b>Select players who attended</b><span><button type="button" class="text-btn" id="selectAll">All</button> · <button type="button" class="text-btn" id="selectNone">None</button> · <span id="selectedCount">0 selected</span></span></div><div id="attendanceChoices" class="attendance-grid"></div><p class="hint" id="shareHint">The total turf and additional costs are divided equally among selected players. Absent players pay ₹0.</p><div class="modal-actions"><button type="button" class="btn ghost" data-close="matchDialog">Cancel</button><button class="btn primary" type="submit" id="matchSubmit">Create match</button></div></form></dialog>
+
+  <dialog id="settleDialog" class="modal"><form id="settleForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">FINAL CHECK</span><h3>Settle this match?</h3></div><button class="icon-btn" type="button" data-close="settleDialog">×</button></div><p id="settleSummary" class="muted"></p><div id="settleShares" class="table-wrap"></div><p class="hint">This deducts each attendee's share atomically. A match can only be settled once and cannot be edited afterwards.</p><input type="hidden" id="settleMatchId"><div class="modal-actions"><button type="button" class="btn ghost" data-close="settleDialog">Cancel</button><button class="btn primary" type="submit">Confirm settlement</button></div></form></dialog>
+
+  <dialog id="reviewDialog" class="modal"><form id="reviewForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">DEPOSIT REQUEST</span><h3>Review request</h3></div><button class="icon-btn" type="button" data-close="reviewDialog">×</button></div><div id="reviewSummary" class="review-box"></div><input type="hidden" id="reviewId"><label>Note to member (optional)<input id="reviewNote" maxlength="160" placeholder="e.g. Received in bank app"></label><div class="modal-actions"><button type="button" class="btn ghost danger" id="rejectBtn">Reject</button><button class="btn primary" type="submit">Approve & credit wallet</button></div></form></dialog>
+
+  <dialog id="pwDialog" class="modal"><form id="pwForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">YOUR ACCOUNT</span><h3 id="pwTitle">Set a password</h3></div></div><p class="muted" id="pwHint"></p><label>New password<input id="pwNew" type="password" minlength="8" autocomplete="new-password" required placeholder="At least 8 characters"></label><label>Confirm password<input id="pwNew2" type="password" minlength="8" autocomplete="new-password" required placeholder="Type it again"></label><div class="modal-actions"><button type="button" class="btn ghost" id="pwSkip">Skip for now</button><button class="btn primary" type="submit">Save password</button></div></form></dialog>
+
+  <dialog id="confirmDialog" class="modal"><form id="confirmForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">PLEASE CONFIRM</span><h3 id="confirmTitle">Are you sure?</h3></div><button class="icon-btn" type="button" data-close="confirmDialog">×</button></div><p id="confirmText" class="muted"></p><div class="modal-actions"><button type="button" class="btn ghost" data-close="confirmDialog">Cancel</button><button class="btn primary danger-fill" type="submit" id="confirmOk">Yes, continue</button></div></form></dialog>
+
+  <script src="js/config.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
