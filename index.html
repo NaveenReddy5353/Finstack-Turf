@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=4.0">
+  <link rel="stylesheet" href="css/style.css?v=4.1">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -87,6 +87,7 @@
         <button class="nav-link admin-only" data-page="members"><span>👥</span> Squad</button>
         <button class="nav-link" data-page="wallet"><span>◈</span> Kiddy Bank</button>
         <button class="nav-link" data-page="deposits"><span>↧</span> Deposits <em id="navDepositBadge" class="nav-badge hidden">0</em></button>
+        <button class="nav-link" data-page="stats"><span>📊</span> My stats</button>
         <button class="nav-link admin-only" data-page="reports"><span>▥</span> Reports</button>
       </nav>
       <div class="sidebar-bottom">
@@ -103,7 +104,7 @@
           <button id="bellBtn" class="icon-btn bell" aria-label="Notifications">🔔<em id="bellBadge" class="bell-badge hidden">0</em></button>
           <div id="notifPanel" class="notif-panel hidden"><div class="notif-head"><b>Notifications</b><div class="btn-row"><button class="text-btn" id="enableAlertsBtn">Enable push alerts</button><span class="muted hidden" id="alertsOn">✓ Push alerts on</span><button class="text-btn" id="markAllRead">Mark all read</button></div></div><div id="notifList" class="notif-list"><div class="empty">No notifications yet.</div></div></div>
         </div>
-        <div class="top-user"><div class="top-user-copy"><b id="topUserName">Player</b><span id="topUserRole">MEMBER</span></div><div class="avatar" id="topAvatar">P</div></div>
+        <button class="top-user" id="accountBtn" title="My account"><div class="top-user-copy"><b id="topUserName">Player</b><span id="topUserRole">MEMBER</span></div><div class="avatar" id="topAvatar">P</div></button>
       </header>
 
       <!-- Pavilion / Overview -->
@@ -175,9 +176,19 @@
 
       <!-- Dressing room / chat -->
       <section id="page-chat" class="page">
-        <div class="section-intro"><div><span class="eyebrow">DRESSING ROOM</span><h2>Club chat</h2><p class="muted">Decide timings, venues and amounts together — like the WhatsApp group, but inside the stadium.</p></div></div>
+        <div class="section-intro"><div><span class="eyebrow">DRESSING ROOM</span><h2>Club chat</h2><p class="muted">Decide timings, venues and amounts together. Messages older than 7 days are cleared automatically every night.</p></div><button class="btn ghost admin-only" id="clearChatBtn">🧹 Clear chat…</button></div>
         <article class="panel chat-panel"><div id="chatList" class="chat-list"><div class="empty">No messages yet. Say hi!</div></div>
           <form id="chatForm" class="chat-compose"><input id="chatInput" maxlength="2000" placeholder="Message the squad…" autocomplete="off" required><button class="btn primary" type="submit">Send</button></form></article>
+      </section>
+
+      <!-- My stats -->
+      <section id="page-stats" class="page">
+        <div class="section-intro"><div><span class="eyebrow">CAREER</span><h2 id="statsTitle">My stats</h2><p class="muted">Built from every ball recorded in the scoreboard.</p></div><select id="statsPlayer" class="select-sm"></select></div>
+        <div id="statsHero" class="stats-hero"></div>
+        <div class="content-grid">
+          <article class="panel"><div class="panel-head"><div><span class="eyebrow">MATCH BY MATCH</span><h3>Recent performances</h3></div></div><div id="statsMatches" class="table-wrap"></div></article>
+          <article class="panel"><div class="panel-head"><div><span class="eyebrow">CLUB LEADERBOARD</span><h3>Season leaders</h3></div><div class="seg" id="lbSeg"><button class="seg-btn active" data-lb="runs">Runs</button><button class="seg-btn" data-lb="wickets">Wickets</button><button class="seg-btn" data-lb="mom">MoM</button></div></div><div id="leaderboard" class="table-wrap"></div></article>
+        </div>
       </section>
 
       <!-- Reports (admin) -->
@@ -198,7 +209,7 @@
   <dialog id="adjustDialog" class="modal"><form id="adjustForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">ADMIN ACTION</span><h3 id="adjustTitle">Wallet adjustment</h3></div><button class="icon-btn" type="button" data-close="adjustDialog">×</button></div><input type="hidden" id="adjustMemberId"><label>Adjustment type<select id="adjustType"><option value="deposit">Deposit / top-up</option><option value="credit">Refund / credit</option><option value="debit">Manual deduction</option></select></label><label>Amount (₹)<input id="adjustAmount" type="number" min="0.01" step="0.01" required></label><label>Reason<input id="adjustReason" maxlength="160" required placeholder="UPI received / correction"></label><div class="modal-actions"><button type="button" class="btn ghost" data-close="adjustDialog">Cancel</button><button class="btn primary" type="submit">Save adjustment</button></div></form></dialog>
 
   <dialog id="matchDialog" class="modal wide"><form id="matchForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">MATCH SETUP</span><h3 id="matchDialogTitle">Create a turf match</h3></div><button class="icon-btn" type="button" data-close="matchDialog">×</button></div><input type="hidden" id="matchId">
-    <div class="form-grid"><label>Match date<input id="matchDate" type="date" required></label><label>Start time<input id="matchTime" type="time"></label><label>Turf / venue<input id="matchVenue" maxlength="120" placeholder="Mansow Turf" required></label><label>Venue map link<input id="matchVenueUrl" type="url" maxlength="300" placeholder="Paste Google Maps link"></label><label>Booking cost (₹)<input id="matchCost" type="number" min="0.01" step="0.01" required placeholder="2400"></label><label>Additional expenses (₹)<input id="extraCost" type="number" min="0" step="0.01" value="0"></label><label>Overs per side<input id="matchOvers" type="number" min="1" max="50" value="10"></label><label>Notes<input id="matchNotes" maxlength="250" placeholder="Optional notes"></label></div>
+    <div class="form-grid"><label>Match date<input id="matchDate" type="date" required></label><label>From (start time)<input id="matchTime" type="time"></label><label>To (end time)<input id="matchEndTime" type="time"></label><label>Turf / venue<input id="matchVenue" maxlength="120" placeholder="Mansow Turf" required></label><label>Venue map link<input id="matchVenueUrl" type="url" maxlength="300" placeholder="Paste Google Maps link"></label><label>Booking cost (₹)<input id="matchCost" type="number" min="0.01" step="0.01" required placeholder="2400"></label><label>Additional expenses (₹)<input id="extraCost" type="number" min="0" step="0.01" value="0"></label><input type="hidden" id="matchOvers"><label>Notes<input id="matchNotes" maxlength="250" placeholder="Optional notes"></label></div>
     <div class="captains-box"><div class="attendance-head"><b>Captains & team names</b><span class="muted">Captains pick their teams once the team sheet is locked</span></div><div class="form-grid"><label>Team A name<input id="teamAName" maxlength="40" placeholder="Lions"></label><label>Captain A<select id="captainA"><option value="">— choose later —</option></select></label><label>Team B name<input id="teamBName" maxlength="40" placeholder="Tigers"></label><label>Captain B<select id="captainB"><option value="">— choose later —</option></select></label></div></div>
     <label class="inline-check vote-toggle add-only"><input type="checkbox" id="matchVoting" checked> Open for voting — notify every member and let them confirm if they are in</label>
     <div id="attendanceBlock"><div class="attendance-head"><b>Select players who attended</b><span><button type="button" class="text-btn" id="selectAll">All</button> · <button type="button" class="text-btn" id="selectNone">None</button> · <span id="selectedCount">0 selected</span></span></div><div id="attendanceChoices" class="attendance-grid"></div><p class="hint" id="shareHint">The total turf and additional costs are divided equally among selected players. Absent players pay ₹0.</p></div>
@@ -213,6 +224,17 @@
 
   <dialog id="confirmDialog" class="modal"><form id="confirmForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">PLEASE CONFIRM</span><h3 id="confirmTitle">Are you sure?</h3></div><button class="icon-btn" type="button" data-close="confirmDialog">×</button></div><p id="confirmText" class="muted"></p><div class="modal-actions"><button type="button" class="btn ghost" data-close="confirmDialog">Cancel</button><button class="btn primary danger-fill" type="submit" id="confirmOk">Yes, continue</button></div></form></dialog>
 
+  <dialog id="memberActions" class="modal sheet"><div class="modal-head"><div><span class="eyebrow">MEMBER</span><h3 id="maTitle">Member</h3><p class="muted" id="maMeta"></p></div><button class="icon-btn" type="button" data-close="memberActions">×</button></div><div id="maButtons" class="sheet-btns"></div></dialog>
+
+  <dialog id="accountDialog" class="modal"><form id="accountForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">MY ACCOUNT</span><h3>Player profile</h3></div><button class="icon-btn" type="button" data-close="accountDialog">×</button></div>
+    <div class="avatar-row"><div class="avatar big" id="accAvatar">P</div><div><label class="btn ghost sm" for="accPhoto">📷 Change photo</label><input type="file" id="accPhoto" accept="image/*" class="hidden"><p class="hint" id="accPhotoHint">JPG/PNG, resized to 256px.</p></div></div>
+    <label>Full name<input id="accName" required maxlength="80"></label><label>Mobile number<input id="accPhone" maxlength="20" placeholder="Optional"></label><label>Playing role<select id="accRole"><option value="">— not set —</option><option value="batter">Batter</option><option value="bowler">Bowler</option><option value="all-rounder">All-rounder</option><option value="keeper">Wicket-keeper</option></select></label><label>Bio<input id="accBio" maxlength="160" placeholder="e.g. Left-arm spin, loves the slog sweep"></label>
+    <p class="hint">Email and admin role are managed by the admin.</p><div class="modal-actions"><button type="button" class="btn ghost" data-close="accountDialog">Cancel</button><button class="btn primary" type="submit">Save profile</button></div></form></dialog>
+
+  <dialog id="batterDialog" class="modal"><form id="batterForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">WICKET!</span><h3 id="batterTitle">New batter in</h3></div></div><p class="muted" id="batterHint"></p><label>Next batter<select id="batterSel"></select></label><div class="modal-actions"><button class="btn primary" type="submit">Send in</button></div></form></dialog>
+
+  <dialog id="bowlerDialog" class="modal"><form id="bowlerForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">OVER COMPLETE</span><h3 id="bowlerTitle">Change bowler</h3></div></div><p class="muted" id="bowlerHint"></p><label>New bowler<select id="bowlerSel"></select></label><div class="modal-actions"><button class="btn primary" type="submit">Start next over</button></div></form></dialog>
+
   <!-- Match centre: line-ups, scorecard, comments -->
   <dialog id="centreDialog" class="modal wide centre"><div class="modal-head"><div><span class="eyebrow" id="centreEyebrow">MATCH CENTRE</span><h3 id="centreTitle">Match</h3><p class="muted" id="centreMeta"></p></div><button class="icon-btn" type="button" data-close="centreDialog">×</button></div>
     <div class="tabs centre-tabs"><button class="tab active" data-ctab="teams">Line-ups</button><button class="tab" data-ctab="score">Scorecard</button><button class="tab" data-ctab="chat">Comments</button></div>
@@ -223,7 +245,7 @@
   </dialog>
 
   <!-- Toss / start -->
-  <dialog id="tossDialog" class="modal"><form id="tossForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">TOSS</span><h3>Start the match</h3></div><button class="icon-btn" type="button" data-close="tossDialog">×</button></div><input type="hidden" id="tossMatchId"><label>Toss won by<select id="tossWinner"></select></label><label>They chose to<select id="tossDecision"><option value="bat">Bat</option><option value="bowl">Bowl</option></select></label><p class="hint">Everyone is notified that the match is live. Score ball-by-ball or just type the totals — both work.</p><div class="modal-actions"><button type="button" class="btn ghost" data-close="tossDialog">Cancel</button><button class="btn primary" type="submit">Start match 🔴</button></div></form></dialog>
+  <dialog id="tossDialog" class="modal"><form id="tossForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">TOSS</span><h3>Start the match</h3></div><button class="icon-btn" type="button" data-close="tossDialog">×</button></div><input type="hidden" id="tossMatchId"><label>Overs per side<input id="tossOvers" type="number" min="1" max="50" value="10" required></label><label>Toss won by<select id="tossWinner"></select></label><label>They chose to<select id="tossDecision"><option value="bat">Bat</option><option value="bowl">Bowl</option></select></label><p class="hint">Everyone is notified that the match is live. Score ball-by-ball or just type the totals — both work.</p><div class="modal-actions"><button type="button" class="btn ghost" data-close="tossDialog">Cancel</button><button class="btn primary" type="submit">Start match 🔴</button></div></form></dialog>
 
   <!-- End match -->
   <dialog id="endDialog" class="modal"><form id="endForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">FULL TIME</span><h3>End the match</h3></div><button class="icon-btn" type="button" data-close="endDialog">×</button></div><input type="hidden" id="endMatchId"><p class="muted" id="endSummary"></p><label>Winner<select id="endWinner"></select></label><label>Result text (optional)<input id="endText" maxlength="120" placeholder="e.g. Lions won by 12 runs"></label><label>Player of the match<select id="endMom"><option value="">— none —</option></select></label><div class="modal-actions"><button type="button" class="btn ghost" data-close="endDialog">Cancel</button><button class="btn primary" type="submit">Confirm result 🏆</button></div></form></dialog>
@@ -231,7 +253,7 @@
   <!-- Type totals -->
   <dialog id="totalsDialog" class="modal"><form id="totalsForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">QUICK SCORE</span><h3 id="totalsTitle">Enter innings total</h3></div><button class="icon-btn" type="button" data-close="totalsDialog">×</button></div><input type="hidden" id="totalsMatchId"><input type="hidden" id="totalsInnings"><div class="form-grid"><label>Runs<input id="totalsRuns" type="number" min="0" max="999" required></label><label>Wickets<input id="totalsWkts" type="number" min="0" max="10" required></label><label>Overs (e.g. 7.3)<input id="totalsOvers" type="number" min="0" step="0.1" required></label></div><label class="inline-check"><input type="checkbox" id="totalsDone"> Innings finished</label><div class="modal-actions"><button type="button" class="btn ghost" data-close="totalsDialog">Cancel</button><button class="btn primary" type="submit">Save score</button></div></form></dialog>
 
-  <script src="js/config.js?v=4.0"></script>
-  <script src="js/app.js?v=4.0"></script>
+  <script src="js/config.js?v=4.1"></script>
+  <script src="js/app.js?v=4.1"></script>
 </body>
 </html>

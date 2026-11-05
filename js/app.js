@@ -1,6 +1,6 @@
 (() => {
   "use strict";
-  const APP_VERSION = "4.0";
+  const APP_VERSION = "4.1";
   const cfg = window.FINSTACK_CONFIG || {};
   const configured = cfg.SUPABASE_URL && !cfg.SUPABASE_URL.includes("YOUR-PROJECT") &&
     cfg.SUPABASE_ANON_KEY && !cfg.SUPABASE_ANON_KEY.includes("YOUR_SUPABASE");
@@ -11,7 +11,7 @@
   const arrivedVia = linkParams.get("type");
   const linkError = linkParams.get("error_description");
   const linkPage = new URLSearchParams(location.search).get("page");
-  const PAGES = ["overview", "members", "wallet", "deposits", "matches", "live", "chat", "reports"];
+  const PAGES = ["overview", "members", "wallet", "deposits", "matches", "live", "chat", "stats", "reports"];
 
   // ---------------------------------------------------------------- state
   let db, user, profile;
@@ -19,7 +19,9 @@
   let teams = [], innings = [], balls = [], messages = [];
   let realtimeChannel = null, refreshTimer = null, installPrompt = null, countdownTimer = null;
   let currentPage = PAGES.includes(linkPage) ? linkPage : "overview";
-  let matchFilter = "upcoming", teamDraft = null, scorerSel = {}; // scorerSel[matchId] = {batter, bowler, wicketType, outPlayer, nbRuns, byeRuns}
+  let matchFilter = "upcoming", teamDraft = null, scorerSel = {}, lbMode = "runs", statsFor = null;
+  try { scorerSel = JSON.parse(localStorage.getItem("ft_scorer") || "{}"); } catch (_) {}
+  const saveScorer = () => { try { localStorage.setItem("ft_scorer", JSON.stringify(scorerSel)); } catch (_) {} }; // scorerSel[matchId] = {batter, bowler, wicketType, outPlayer, nbRuns, byeRuns}
 
   // -------------------------------------------------------------- helpers
   const money = n => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(Number(n || 0));
@@ -30,6 +32,9 @@
   const timeFmt = t => t ? new Date("2000-01-01T" + t).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" }) : "";
   const todayIso = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
   const nameOf = id => members.find(m => m.id === id)?.full_name || "Member";
+  const avatarOf = id => members.find(m => m.id === id)?.avatar_url || null;
+  const avHtml = (id, cls = "avatar") => { const u = avatarOf(id); const n = nameOf(id); return `<span class="${cls}">${u ? `<img src="${esc(u)}" alt="">` : esc(n.trim()[0] || "P").toUpperCase()}</span>`; };
+  const roleLabel = r => ({ batter: "Batter", bowler: "Bowler", "all-rounder": "All-rounder", keeper: "Wicket-keeper" }[r] || "");
   const shortName = id => { const n = nameOf(id).split(" "); return n.length > 1 ? n[0] + " " + n[1][0] + "." : n[0]; };
   const methodLabel = m => ({ upi: "UPI", cash: "Cash", bank: "Bank", other: "Other" }[m] || m);
   const oversFmt = b => `${Math.floor((b || 0) / 6)}.${(b || 0) % 6}`;
@@ -90,7 +95,7 @@
   }
   async function refreshAll() {
     const [m, t, ma, r, v, n, tm, inn, bl, msg] = await Promise.all([
-      db.from("profiles").select("id,user_id,full_name,email,phone,role,approved,active,created_at").order("full_name"),
+      db.from("profiles").select("id,user_id,full_name,email,phone,role,approved,active,created_at,avatar_url,playing_role,bio").order("full_name"),
       db.from("wallet_transactions").select("id,profile_id,amount,transaction_type,description,match_id,created_at").order("created_at", { ascending: false }).limit(1000),
       db.from("matches").select("*,match_attendance(profile_id,share_amount)").order("match_date", { ascending: false }).order("created_at", { ascending: false }).limit(200),
       db.from("deposit_requests").select("id,profile_id,amount,method,reference,note,status,created_at,reviewed_by,reviewed_at,review_note").order("created_at", { ascending: false }).limit(300),
@@ -98,11 +103,12 @@
       db.from("notifications").select("id,kind,title,body,match_id,read,created_at").order("created_at", { ascending: false }).limit(100),
       db.from("match_teams").select("match_id,profile_id,team"),
       db.from("match_innings").select("*"),
-      db.from("match_balls").select("*").order("created_at", { ascending: false }).limit(3000),
+      db.from("match_balls").select("*").order("created_at", { ascending: false }).limit(10000),
       db.from("messages").select("id,profile_id,match_id,kind,body,created_at").order("created_at", { ascending: false }).limit(400)
     ]);
     for (const x of [m, t, ma, r]) if (x.error) throw x.error;
     members = m.data || []; transactions = t.data || []; matches = ma.data || []; requests = r.data || [];
+    const me = members.find(x => x.id === profile?.id); if (me) profile = me;
     votes = v.error ? [] : (v.data || []); notifications = n.error ? [] : (n.data || []);
     teams = tm.error ? [] : (tm.data || []); innings = inn.error ? [] : (inn.data || []); balls = bl.error ? [] : (bl.data || []); messages = msg.error ? [] : (msg.data || []).reverse();
     if (v.error || n.error) console.warn("v3 tables missing? Run database/upgrade-v3.sql", v.error || n.error);
@@ -111,7 +117,7 @@
   }
 
   // --------------------------------------------------------------- render
-  function renderAll() { renderHeader(); renderBell(); renderOverview(); renderMembers(); renderWallet(); renderDeposits(); renderMatches(); renderLive(); renderChat(); renderReports(); renderCentre(); }
+  function renderAll() { renderHeader(); renderBell(); renderOverview(); renderMembers(); renderWallet(); renderDeposits(); renderMatches(); renderLive(); renderChat(); renderStats(); renderReports(); renderCentre(); }
   function voteInfo(m) {
     const vs = votes.filter(v => v.match_id === m.id);
     const yes = vs.filter(v => v.vote === "yes").map(v => v.profile_id), no = vs.filter(v => v.vote === "no").map(v => v.profile_id);
@@ -131,7 +137,7 @@
   }
   function renderHeader() {
     $("topUserName").textContent = profile.full_name || user.email; $("topUserRole").textContent = isAdmin() ? "ADMIN" : "MEMBER";
-    $("topAvatar").textContent = (profile.full_name || user.email || "P").trim()[0].toUpperCase();
+    $("topAvatar").innerHTML = profile.avatar_url ? `<img src="${esc(profile.avatar_url)}" alt="">` : esc((profile.full_name || user.email || "P").trim()[0].toUpperCase());
     $("todayLabel").textContent = new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
     const pending = requests.filter(r => r.status === "pending" && (isAdmin() || r.profile_id === profile.id)).length;
     $("navDepositBadge").textContent = pending; $("navDepositBadge").classList.toggle("hidden", !pending);
@@ -173,7 +179,7 @@
     $("nextFixture").classList.toggle("hidden", !next);
     if (next) {
       const vi = next.status === "voting" ? voteInfo(next) : null; const att = (next.match_attendance || []).length;
-      $("nextFixture").innerHTML = `<div class="nf-grid"><div><span class="eyebrow">NEXT FIXTURE · ${stageOf(next) === "voting" ? "VOTING OPEN" : stageOf(next) === "live" ? "LIVE NOW" : "TEAM LOCKED"}</span><div class="nf-title">${esc(next.venue)}</div><div class="nf-meta"><span>📅 <b>${dateShort(next.match_date)}</b></span>${next.start_time ? `<span>⏰ <b>${timeFmt(next.start_time)}</b></span>` : ""}${next.venue_url ? `<span>📍 <a href="${esc(next.venue_url)}" target="_blank" rel="noopener">Open map ↗</a></span>` : ""}<span>🏏 <b>${next.overs || 10}</b> overs</span><span>${vi ? `<b>${vi.yes.length}</b> in · ${vi.pending.length} to vote` : `<b>${att}</b> players`}</span></div><div class="captain-row">${next.captain_a ? `<span>©️ ${esc(tname(next, "A"))}: <b>${esc(nameOf(next.captain_a))}</b></span>` : ""}${next.captain_b ? `<span>©️ ${esc(tname(next, "B"))}: <b>${esc(nameOf(next.captain_b))}</b></span>` : ""}</div><div class="btn-row" style="margin-top:12px"><button class="btn primary sm" data-open-match="${next.id}">Match centre →</button>${vi && !vi.mine ? `<button class="btn ghost sm" data-goto="matches">Vote now</button>` : ""}</div></div><div class="countdown" id="countdown" data-when="${next.match_date}T${next.start_time || "00:00:00"}"></div></div>`;
+      $("nextFixture").innerHTML = `<div class="nf-grid"><div><span class="eyebrow">NEXT FIXTURE · ${stageOf(next) === "voting" ? "VOTING OPEN" : stageOf(next) === "live" ? "LIVE NOW" : "TEAM LOCKED"}</span><div class="nf-title">${esc(next.venue)}</div><div class="nf-meta"><span>📅 <b>${dateShort(next.match_date)}</b></span>${next.start_time ? `<span>⏰ <b>${timeFmt(next.start_time)}</b></span>` : ""}${next.venue_url ? `<span>📍 <a href="${esc(next.venue_url)}" target="_blank" rel="noopener">Open map ↗</a></span>` : ""}${next.end_time ? `<span>🏁 <b>${timeFmt(next.end_time)}</b></span>` : ""}${next.overs ? `<span>🏏 <b>${next.overs}</b> overs</span>` : ""}<span>${vi ? `<b>${vi.yes.length}</b> in · ${vi.pending.length} to vote` : `<b>${att}</b> players`}</span></div><div class="captain-row">${next.captain_a ? `<span>©️ ${esc(tname(next, "A"))}: <b>${esc(nameOf(next.captain_a))}</b></span>` : ""}${next.captain_b ? `<span>©️ ${esc(tname(next, "B"))}: <b>${esc(nameOf(next.captain_b))}</b></span>` : ""}</div><div class="btn-row" style="margin-top:12px"><button class="btn primary sm" data-open-match="${next.id}">Match centre →</button>${vi && !vi.mine ? `<button class="btn ghost sm" data-goto="matches">Vote now</button>` : ""}</div></div><div class="countdown" id="countdown" data-when="${next.match_date}T${next.start_time || "00:00:00"}"></div></div>`;
       tickCountdown();
     }
     $("overviewTransactions").innerHTML = txRows(transactions.filter(t => isAdmin() || t.profile_id === profile.id).slice(0, 6), isAdmin());
@@ -202,14 +208,8 @@
     $("membersTable").innerHTML = rows.length ? `<table><thead><tr><th>MEMBER</th><th>CONTACT</th><th>ROLE</th><th>STATUS</th><th>LOGIN</th><th>BALANCE</th><th>ACTIONS</th></tr></thead><tbody>${rows.map(m => {
       const status = m.active === false ? '<span class="status inactive">INACTIVE</span>' : m.approved ? '<span class="status">ACTIVE</span>' : '<span class="status pending">PENDING</span>';
       const login = m.user_id ? '<span class="status">LINKED</span>' : m.email ? '<span class="status pending">INVITED</span>' : '<span class="muted">No email</span>';
-      const actions = [
-        !m.approved ? `<button class="text-btn" data-approve="${m.id}">Approve</button>` : "",
-        `<button class="text-btn" data-edit-member="${m.id}">Edit</button>`,
-        m.approved ? `<button class="text-btn" data-adjust="${m.id}">Wallet</button>` : "",
-        m.email && m.active !== false ? `<button class="text-btn" data-invite="${m.id}">${m.user_id ? "Send login link" : "Resend invite"}</button>` : "",
-        m.id !== profile.id ? `<button class="text-btn danger" data-delete-member="${m.id}">Delete</button>` : ""
-      ].filter(Boolean).join(" · ");
-      return `<tr><td><b>${esc(m.full_name)}</b></td><td>${esc(m.email || "—")}${m.phone ? `<small class="muted"> · ${esc(m.phone)}</small>` : ""}</td><td>${esc(m.role)}</td><td>${status}</td><td>${login}</td><td>${money(balanceFor(m.id))}</td><td class="actions">${actions}</td></tr>`;
+      const actions = `<button class="btn ghost sm manage-btn" data-manage="${m.id}">Manage ⋯</button>`;
+      return `<tr><td>${avHtml(m.id, "msg-av")}<b>${esc(m.full_name)}</b>${m.playing_role ? `<small class="muted"> · ${roleLabel(m.playing_role)}</small>` : ""}</td><td>${esc(m.email || "—")}${m.phone ? `<small class="muted"> · ${esc(m.phone)}</small>` : ""}</td><td>${esc(m.role)}</td><td>${status}</td><td>${login}</td><td>${money(balanceFor(m.id))}</td><td class="actions">${actions}</td></tr>`;
     }).join("")}</tbody></table>` : '<div class="empty">No members yet. Click “Add member” to add your squad.</div>';
     $("depositMember").innerHTML = approved.map(m => `<option value="${m.id}">${esc(m.full_name)}</option>`).join("");
     const f = $("walletFilter"); const cur = f.value;
@@ -250,7 +250,7 @@
     }
   }
   function matchDetailsLine(m) {
-    return `<div class="match-meta">📅 ${dateShort(m.match_date)}${m.start_time ? ` · ⏰ ${timeFmt(m.start_time)}` : ""} · 🏏 ${m.overs || 10} overs${m.venue_url ? ` · <a href="${esc(m.venue_url)}" target="_blank" rel="noopener">📍 Map ↗</a>` : ""}${m.notes ? " · " + esc(m.notes) : ""}</div>` +
+    return `<div class="match-meta">📅 ${dateShort(m.match_date)}${m.start_time ? ` · ⏰ ${timeFmt(m.start_time)}${m.end_time ? " – " + timeFmt(m.end_time) : ""}` : ""}${m.overs ? ` · 🏏 ${m.overs} overs` : ""}${m.venue_url ? ` · <a href="${esc(m.venue_url)}" target="_blank" rel="noopener">📍 Map ↗</a>` : ""}${m.notes ? " · " + esc(m.notes) : ""}</div>` +
       ((m.captain_a || m.captain_b) ? `<div class="captain-row">${m.captain_a ? `<span>©️ ${esc(tname(m, "A"))}: <b>${esc(nameOf(m.captain_a))}</b></span>` : ""}${m.captain_b ? `<span>©️ ${esc(tname(m, "B"))}: <b>${esc(nameOf(m.captain_b))}</b></span>` : ""}</div>` : "");
   }
   function resultStrip(m) {
@@ -309,22 +309,53 @@
       return `<article class="board"><div class="board-head"><h3>🔴 ${esc(m.venue)} · ${dateShort(m.match_date)}</h3><div class="btn-row"><span class="status live">LIVE</span><button class="btn ghost sm" data-open-match="${m.id}" data-ctab="score">Full scorecard</button></div></div><div class="board-teams">${bt("A")}<div class="board-vs">VS</div>${bt("B")}</div>${line}${last.length ? `<div class="balls">${last.map(ballChip).join("")}</div>` : ""}${cur ? statsTables(m, cur.innings_no) : ""}${scorer}</article>`;
     }).join("") : '<div class="empty">No match is live right now. Captains or the admin can start one from Fixtures once the team sheet is locked.</div>';
   }
-  function scorerPanel(m, cur) {
+  function dismissed(m, no) { return new Set(ballsOf(m, no).filter(b => b.is_wicket && b.out_player_id).map(b => b.out_player_id)); }
+  function scorerState(m, cur) {
     const tm = teamOf(m); const att = (m.match_attendance || []).map(a => a.profile_id);
-    const batters = (tm[cur.batting_team].length ? tm[cur.batting_team] : att); const bowlers = (tm[cur.batting_team === "A" ? "B" : "A"].length ? tm[cur.batting_team === "A" ? "B" : "A"] : att);
-    const s = scorerSel[m.id] ||= {}; if (!batters.includes(s.batter)) s.batter = batters[0]; if (!bowlers.includes(s.bowler)) s.bowler = bowlers[0];
+    const batSide = tm[cur.batting_team].length ? tm[cur.batting_team] : att.filter(p => !tm[cur.batting_team === "A" ? "B" : "A"].includes(p));
+    const bowlSide = tm[cur.batting_team === "A" ? "B" : "A"].length ? tm[cur.batting_team === "A" ? "B" : "A"] : att.filter(p => !batSide.includes(p));
+    const out = dismissed(m, cur.innings_no);
+    const available = batSide.filter(p => !out.has(p));
+    const key = m.id + ":" + cur.innings_no; const s = scorerSel[key] ||= {};
+    if (!available.includes(s.striker)) s.striker = available.find(p => p !== s.nonStriker) || available[0] || null;
+    if (!available.includes(s.nonStriker) || s.nonStriker === s.striker) s.nonStriker = available.find(p => p !== s.striker) || null;
+    if (!bowlSide.includes(s.bowler)) s.bowler = bowlSide[0] || null;
+    return { key, s, batSide, bowlSide, out, available };
+  }
+  function scorerPanel(m, cur) {
+    const { key, s, bowlSide, out, available } = scorerState(m, cur);
     const opt = (ids, sel) => ids.map(id => `<option value="${id}" ${id === sel ? "selected" : ""}>${esc(nameOf(id))}</option>`).join("");
-    return `<div class="scorer" data-scorer="${m.id}" data-innings="${cur.innings_no}">
-      <div class="row"><label style="margin:0;display:flex;gap:6px;align-items:center;color:#aab8c9">Striker <select data-sel="batter">${opt(batters, s.batter)}</select></label><label style="margin:0;display:flex;gap:6px;align-items:center;color:#aab8c9">Bowler <select data-sel="bowler">${opt(bowlers, s.bowler)}</select></label></div>
-      <div class="runbtns">${[0, 1, 2, 3].map(r => `<button class="runbtn" data-ball="run" data-runs="${r}">${r}</button>`).join("")}<button class="runbtn four" data-ball="run" data-runs="4">4</button><button class="runbtn six" data-ball="run" data-runs="6">6</button><button class="runbtn x" data-ball="wd">Wd</button><button class="runbtn x" data-ball="nb">Nb</button><button class="runbtn x" data-ball="b">Bye</button><button class="runbtn x" data-ball="lb">LB</button><button class="runbtn w" data-ball="w">W</button></div>
+    const bench = [...out].map(id => `<s>${esc(shortName(id))}</s>`).join(", ");
+    return `<div class="scorer" data-scorer="${m.id}" data-innings="${cur.innings_no}" data-key="${key}">
+      <div class="crease"><span class="pill">🏏 Striker <b>${s.striker ? esc(nameOf(s.striker)) : "—"}</b></span><span class="pill">Non-striker <b>${s.nonStriker ? esc(nameOf(s.nonStriker)) : "—"}</b></span><span class="pill bowl">⚾ Bowler <b>${s.bowler ? esc(nameOf(s.bowler)) : "—"}</b></span></div>
+      <div class="row"><label style="margin:0;display:flex;gap:6px;align-items:center;color:#aab8c9">Striker <select data-sel="striker">${opt(available, s.striker)}</select></label><label style="margin:0;display:flex;gap:6px;align-items:center;color:#aab8c9">Non-striker <select data-sel="nonStriker">${opt(available, s.nonStriker)}</select></label><button type="button" class="btn ghost sm" data-swap="${key}">⇄ Swap</button><label style="margin:0;display:flex;gap:6px;align-items:center;color:#aab8c9">Bowler <select data-sel="bowler">${opt(bowlSide, s.bowler)}</select></label></div>
+      ${out.size ? `<div class="bench">Bench (out): ${bench}</div>` : ""}
+      <div class="runbtns" style="margin-top:10px">${[0, 1, 2, 3].map(r => `<button class="runbtn" data-ball="run" data-runs="${r}">${r}</button>`).join("")}<button class="runbtn four" data-ball="run" data-runs="4">4</button><button class="runbtn six" data-ball="run" data-runs="6">6</button><button class="runbtn x" data-ball="wd">Wd</button><button class="runbtn x" data-ball="nb">Nb</button><button class="runbtn x" data-ball="b">Bye</button><button class="runbtn x" data-ball="lb">LB</button><button class="runbtn w" data-ball="w">W</button></div>
       <div class="row" style="margin-top:10px"><label style="margin:0;display:flex;gap:6px;align-items:center;color:#aab8c9">Wicket type <select data-sel="wicketType">${["bowled", "caught", "lbw", "run out", "stumped", "hit wicket", "retired"].map(w => `<option ${w === (s.wicketType || "bowled") ? "selected" : ""}>${w}</option>`).join("")}</select></label><label style="margin:0;display:flex;gap:6px;align-items:center;color:#aab8c9">Runs on Nb/Bye <select data-sel="extraRuns">${[0, 1, 2, 3, 4].map(r => `<option ${r === (s.extraRuns ?? 1) ? "selected" : ""}>${r}</option>`).join("")}</select></label></div>
       <div class="row" style="margin-top:10px"><button class="btn ghost sm" data-undo="${m.id}" data-innings="${cur.innings_no}">↶ Undo last ball</button><button class="btn ghost sm" data-totals="${m.id}" data-innings="${cur.innings_no}">Type totals</button><button class="btn ghost sm" data-end-innings="${m.id}" data-innings="${cur.innings_no}">End innings</button><button class="btn primary sm" data-end-match="${m.id}">End match 🏆</button></div></div>`;
+  }
+  function promptBatter(m, cur, outId, partner, slot) {
+    const { s, available } = scorerState(m, cur);
+    const others = available.filter(p => p !== partner);
+    if (!others.length) { s.striker = partner || s.striker; s.nonStriker = null; saveScorer(); renderLive(); toast("No batters left — end the innings."); return; }
+    $("batterTitle").textContent = `${nameOf(outId)} is out`; $("batterHint").textContent = `${nameOf(outId)} goes to the bench. Choose who comes in${slot === "striker" ? " (on strike)" : ""}.`;
+    $("batterSel").innerHTML = others.map(id => `<option value="${id}">${esc(nameOf(id))}</option>`).join("");
+    $("batterForm").onsubmit = e => { e.preventDefault(); s[slot] = $("batterSel").value; s[slot === "striker" ? "nonStriker" : "striker"] = partner; saveScorer(); closeDialog("batterDialog"); renderLive(); };
+    $("batterDialog").showModal();
+  }
+  function promptBowler(m, cur) {
+    const { s, bowlSide } = scorerState(m, cur);
+    const others = bowlSide.filter(p => p !== s.bowler);
+    $("bowlerTitle").textContent = `Over ${Math.floor(cur.balls / 6)} complete`; $("bowlerHint").textContent = `${nameOf(s.bowler)} finished the over. Batters change ends. Choose the next bowler${others.length ? " (same bowler can't bowl two in a row)" : ""}.`;
+    $("bowlerSel").innerHTML = (others.length ? others : bowlSide).map(id => `<option value="${id}">${esc(nameOf(id))}</option>`).join("");
+    $("bowlerForm").onsubmit = e => { e.preventDefault(); s.bowler = $("bowlerSel").value; saveScorer(); closeDialog("bowlerDialog"); renderLive(); };
+    $("bowlerDialog").showModal();
   }
   // ---- chat
   function msgHtml(x) {
     const mine = x.profile_id === profile.id;
     if (x.kind === "system") return `<div class="msg system">${esc(x.body)}<small>${dtFmt(x.created_at)}</small></div>`;
-    return `<div class="msg ${mine ? "mine" : ""} ${x.kind === "vote" ? "vote" : ""}">${(mine || isAdmin()) ? `<button class="del" data-del-msg="${x.id}" title="Delete">✕</button>` : ""}<b>${esc(x.profile_id ? nameOf(x.profile_id) : "System")}${x.kind === "vote" ? " · vote note" : ""}</b>${esc(x.body)}<small>${dtFmt(x.created_at)}</small></div>`;
+    return `<div class="msg ${mine ? "mine" : ""} ${x.kind === "vote" ? "vote" : ""}">${(mine || isAdmin()) ? `<button class="del" data-del-msg="${x.id}" title="Delete">✕</button>` : ""}<b>${x.profile_id ? avHtml(x.profile_id, "msg-av") : ""}${esc(x.profile_id ? nameOf(x.profile_id) : "System")}${x.kind === "vote" ? " · vote note" : ""}</b>${esc(x.body)}<small>${dtFmt(x.created_at)}</small></div>`;
   }
   function renderChat() {
     const list = messages.filter(x => !x.match_id);
@@ -349,11 +380,11 @@
     const st = stageOf(m);
     $("centreEyebrow").textContent = `MATCH CENTRE · ${st === "voting" ? "VOTING OPEN" : st === "live" ? "🔴 LIVE" : st === "done" ? "FULL TIME" : "TEAM LOCKED"}`;
     $("centreTitle").textContent = m.venue;
-    $("centreMeta").innerHTML = `${dateFmt(m.match_date)}${m.start_time ? " · " + timeFmt(m.start_time) : ""} · ${m.overs || 10} overs${m.venue_url ? ` · <a href="${esc(m.venue_url)}" target="_blank" rel="noopener">📍 Map ↗</a>` : ""} · ${money(m.total_cost)} total`;
+    $("centreMeta").innerHTML = `${dateFmt(m.match_date)}${m.start_time ? " · " + timeFmt(m.start_time) + (m.end_time ? " – " + timeFmt(m.end_time) : "") : ""}${m.overs ? ` · ${m.overs} overs` : canScore(m) && st !== "voting" && st !== "done" ? ` · <button class="text-btn" data-set-overs="${m.id}">set overs</button>` : ""}${m.venue_url ? ` · <a href="${esc(m.venue_url)}" target="_blank" rel="noopener">📍 Map ↗</a>` : ""} · ${money(m.total_cost)} total`;
     // teams
     const att = (m.match_attendance || []).map(a => a.profile_id); const tm = teamDraft || teamOf(m);
     const editable = canScore(m) && st !== "voting" && st !== "done";
-    const li = (pid, t) => `<li><span>${esc(nameOf(pid))}${(t === "A" ? m.captain_a : m.captain_b) === pid ? ' <span class="chip cap" style="padding:1px 6px">©️ captain</span>' : ""}</span>${editable ? `<button class="text-btn danger" data-team-move="${pid}" data-team-to="">remove</button>` : ""}</li>`;
+    const li = (pid, t) => `<li><span>${avHtml(pid, "msg-av")}${esc(nameOf(pid))}${members.find(x => x.id === pid)?.playing_role ? ` <small class="muted">${roleLabel(members.find(x => x.id === pid).playing_role)}</small>` : ""}${(t === "A" ? m.captain_a : m.captain_b) === pid ? ' <span class="chip cap" style="padding:1px 6px">©️ captain</span>' : ""}</span>${editable ? `<button class="text-btn danger" data-team-move="${pid}" data-team-to="">remove</button>` : ""}</li>`;
     const col = t => `<div class="lineup"><h4>${esc(tname(m, t))} <span class="muted" style="font-size:11px">${tm[t].length} players</span></h4><ul>${tm[t].map(p => li(p, t)).join("") || '<li class="muted">No players yet</li>'}</ul></div>`;
     const pool = att.filter(p => !tm.A.includes(p) && !tm.B.includes(p));
     $("ctab-teams").innerHTML = st === "voting" ? `<div class="empty">Teams are picked once voting closes and the team sheet is locked.<br><br>${voteInfo(m).yes.length} in so far.</div>` :
@@ -419,7 +450,7 @@
     const m = id ? matches.find(x => x.id === id) : null;
     const checked = new Set(m ? (m.match_attendance || []).map(a => a.profile_id) : attendeeCandidates(null).map(x => x.id));
     $("matchId").value = m?.id || ""; $("matchDate").value = m?.match_date || todayIso(); $("matchVenue").value = m?.venue || "";
-    $("matchTime").value = m?.start_time ? m.start_time.slice(0, 5) : ""; $("matchVenueUrl").value = m?.venue_url || ""; $("matchOvers").value = m?.overs || 10;
+    $("matchTime").value = m?.start_time ? m.start_time.slice(0, 5) : ""; $("matchEndTime").value = m?.end_time ? m.end_time.slice(0, 5) : ""; $("matchVenueUrl").value = m?.venue_url || ""; $("matchOvers").value = m?.overs || "";
     $("matchCost").value = m ? Number(m.turf_cost) : ""; $("extraCost").value = m ? Number(m.extra_cost) : 0; $("matchNotes").value = m?.notes || "";
     $("teamAName").value = m?.team_a_name && m.team_a_name !== "Team A" ? m.team_a_name : ""; $("teamBName").value = m?.team_b_name && m.team_b_name !== "Team B" ? m.team_b_name : "";
     const capOpts = '<option value="">— choose later —</option>' + activeMembers().map(x => `<option value="${x.id}">${esc(x.full_name)}</option>`).join("");
@@ -441,6 +472,19 @@
     $("settleShares").innerHTML = `<table><thead><tr><th>PLAYER</th><th>SHARE</th><th>BALANCE</th></tr></thead><tbody>${att.map(a => { const b = balanceFor(a.profile_id); const ok = b >= Number(a.share_amount); return `<tr><td>${esc(nameOf(a.profile_id))}</td><td>${money(a.share_amount)}</td><td class="${ok ? "amount-positive" : "amount-negative"}">${money(b)}${ok ? "" : " ⚠"}</td></tr>`; }).join("")}</tbody></table>` + (short.length ? `<p class="hint warn">${short.length} player${short.length === 1 ? " has" : "s have"} insufficient balance — settlement will be blocked until they top up.</p>` : "");
     $("settleDialog").showModal();
   }
+  function openManage(id) {
+    const m = members.find(x => x.id === id); if (!m) return;
+    $("maTitle").textContent = m.full_name; $("maMeta").textContent = `${m.email || "no email"} · ${money(balanceFor(m.id))} · ${m.active === false ? "inactive" : m.approved ? "active" : "pending approval"}`;
+    const b = (attr, icon, label, cls = "ghost") => `<button class="btn ${cls}" ${attr}="${m.id}" data-close="memberActions"><span>${icon}</span>${label}</button>`;
+    $("maButtons").innerHTML = [
+      !m.approved ? b("data-approve", "✅", "Approve member", "primary") : "",
+      b("data-edit-member", "✏️", "Edit name, email, role, status"),
+      m.approved ? b("data-adjust", "₹", "Wallet: deposit / credit / deduct") : "",
+      m.email && m.active !== false ? b("data-invite", "✉️", m.user_id ? "Send login link" : "Resend invite") : "",
+      m.id !== profile.id ? b("data-delete-member", "🗑️", "Delete member", "ghost danger") : ""
+    ].filter(Boolean).join("");
+    $("memberActions").showModal();
+  }
   function openReview(id) {
     const r = requests.find(x => x.id === id); if (!r) return;
     $("reviewId").value = id; $("reviewNote").value = "";
@@ -449,7 +493,7 @@
   }
   function openToss(id) {
     const m = matches.find(x => x.id === id); if (!m) return;
-    $("tossMatchId").value = id; $("tossWinner").innerHTML = `<option value="A">${esc(tname(m, "A"))}</option><option value="B">${esc(tname(m, "B"))}</option>`;
+    $("tossMatchId").value = id; $("tossOvers").value = m.overs || 10; $("tossWinner").innerHTML = `<option value="A">${esc(tname(m, "A"))}</option><option value="B">${esc(tname(m, "B"))}</option>`;
     $("tossDialog").showModal();
   }
   function openEnd(id) {
@@ -468,16 +512,67 @@
     $("totalsDialog").showModal();
   }
   async function scoreBall(matchId, no, kind, runs) {
-    const s = scorerSel[matchId] || {}; const extraRuns = Number(s.extraRuns ?? 1);
-    const args = { p_match_id: matchId, p_innings_no: Number(no), p_batter: s.batter || null, p_bowler: s.bowler || null, p_runs: 0, p_extra_type: null, p_extra_runs: 0, p_is_wicket: false, p_wicket_type: null, p_out_player: null };
-    if (kind === "run") args.p_runs = Number(runs);
-    else if (kind === "wd") { args.p_extra_type = "wd"; args.p_extra_runs = 1; }
-    else if (kind === "nb") { args.p_extra_type = "nb"; args.p_extra_runs = 1; args.p_runs = extraRuns; }
-    else if (kind === "b" || kind === "lb") { args.p_extra_type = kind; args.p_extra_runs = extraRuns; }
-    else if (kind === "w") { args.p_is_wicket = true; args.p_wicket_type = s.wicketType || "bowled"; args.p_out_player = s.batter || null; }
+    const m = matches.find(x => x.id === matchId); const cur = m && inningsOf(m).find(i => i.innings_no === Number(no)); if (!m || !cur) return;
+    const { s } = scorerState(m, cur); const extraRuns = Number(s.extraRuns ?? 1);
+    if (!s.striker || !s.bowler) throw new Error("Pick the striker and the bowler first.");
+    const args = { p_match_id: matchId, p_innings_no: Number(no), p_batter: s.striker, p_bowler: s.bowler, p_runs: 0, p_extra_type: null, p_extra_runs: 0, p_is_wicket: false, p_wicket_type: null, p_out_player: null };
+    let batRuns = 0, legal = true;
+    if (kind === "run") { args.p_runs = Number(runs); batRuns = Number(runs); }
+    else if (kind === "wd") { args.p_extra_type = "wd"; args.p_extra_runs = 1; legal = false; }
+    else if (kind === "nb") { args.p_extra_type = "nb"; args.p_extra_runs = 1; args.p_runs = extraRuns; batRuns = extraRuns; legal = false; }
+    else if (kind === "b" || kind === "lb") { args.p_extra_type = kind; args.p_extra_runs = extraRuns; batRuns = extraRuns; }
+    else if (kind === "w") { args.p_is_wicket = true; args.p_wicket_type = s.wicketType || "bowled"; args.p_out_player = s.striker; }
     const { data, error } = await db.rpc("score_ball", args); if (error) throw error;
+    // strike rotation: odd runs swap; over end swaps again
+    if (batRuns % 2 === 1 && !args.p_is_wicket) { [s.striker, s.nonStriker] = [s.nonStriker, s.striker]; }
+    const outId = args.p_is_wicket ? args.p_out_player : null;
+    const slot = outId === s.nonStriker ? "nonStriker" : "striker"; const partner = slot === "striker" ? s.nonStriker : s.striker;
+    const overDone = !!data?.over_complete && data?.status === "live";
+    if (overDone) { [s.striker, s.nonStriker] = [s.nonStriker, s.striker]; }
+    saveScorer();
     await refreshAll();
-    if (data?.status === "completed") toast(Number(no) === 1 ? "Innings over — second innings is live." : "Target reached / innings over. End the match when ready.");
+    const fresh = matches.find(x => x.id === matchId); const curNow = fresh && inningsOf(fresh).find(i => i.innings_no === Number(no));
+    if (data?.status === "completed") { toast(Number(no) === 1 ? "Innings over — second innings is live." : "Target reached / innings over. End the match when ready."); return; }
+    if (outId && curNow) promptBatter(fresh, curNow, outId, partner, slot);
+    else if (overDone && curNow) promptBowler(fresh, curNow);
+  }
+  function openAccount() {
+    $("accName").value = profile.full_name || ""; $("accPhone").value = profile.phone || ""; $("accRole").value = profile.playing_role || ""; $("accBio").value = profile.bio || "";
+    $("accAvatar").innerHTML = profile.avatar_url ? `<img src="${esc(profile.avatar_url)}" alt="">` : esc((profile.full_name || "P").trim()[0].toUpperCase());
+    $("accAvatar").dataset.url = profile.avatar_url || ""; $("accPhotoHint").textContent = "JPG/PNG, resized to 256px.";
+    $("accountDialog").showModal();
+  }
+  function resizeImage(file, size = 256) {
+    return new Promise((resolve, reject) => { const img = new Image(); img.onload = () => { const c = document.createElement("canvas"); const r = Math.max(size / img.width, size / img.height); c.width = size; c.height = size; const ctx = c.getContext("2d"); ctx.drawImage(img, (size - img.width * r) / 2, (size - img.height * r) / 2, img.width * r, img.height * r); c.toBlob(b => b ? resolve(b) : reject(new Error("Could not process image")), "image/jpeg", 0.85); }; img.onerror = () => reject(new Error("Not a valid image")); img.src = URL.createObjectURL(file); });
+  }
+  function careerStats(pid) {
+    const per = []; let inn = 0;
+    matches.filter(m => m.play_status === "completed" || m.play_status === "live").forEach(m => {
+      inningsOf(m).forEach(i => {
+        const st = playerStats(m, i.innings_no); const b = st.bat[pid], bw = st.bowl[pid];
+        if (b || bw) per.push({ m, i, b, bw });
+      });
+    });
+    const bats = per.filter(x => x.b); const bowls = per.filter(x => x.bw);
+    const runs = bats.reduce((a, x) => a + x.b.runs, 0), ballsF = bats.reduce((a, x) => a + x.b.balls, 0), fours = bats.reduce((a, x) => a + x.b.fours, 0), sixes = bats.reduce((a, x) => a + x.b.sixes, 0), outs = bats.filter(x => x.b.out).length;
+    const wk = bowls.reduce((a, x) => a + x.bw.wkts, 0), conc = bowls.reduce((a, x) => a + x.bw.runs, 0), bb = bowls.reduce((a, x) => a + x.bw.balls, 0);
+    const hs = bats.reduce((a, x) => Math.max(a, x.b.runs), 0);
+    const played = matches.filter(m => m.play_status === "completed" && (m.match_attendance || []).some(a => a.profile_id === pid)).length;
+    const mom = matches.filter(m => m.mom_profile_id === pid).length;
+    return { per, played, inns: bats.length, runs, ballsF, fours, sixes, outs, hs, wk, conc, bb, mom, sr: ballsF ? (runs / ballsF * 100).toFixed(1) : "—", avg: outs ? (runs / outs).toFixed(1) : runs ? "∞" : "—", econ: bb ? rr(conc, bb) : "—" };
+  }
+  function renderStats() {
+    const sel = $("statsPlayer"); const cur = statsFor || profile.id;
+    sel.innerHTML = members.filter(m => m.approved).map(m => `<option value="${m.id}" ${m.id === cur ? "selected" : ""}>${esc(m.full_name)}</option>`).join("");
+    const pid = cur; const p = members.find(m => m.id === pid) || profile; const c = careerStats(pid);
+    $("statsTitle").textContent = pid === profile.id ? "My stats" : `${p.full_name} · stats`;
+    $("statsHero").innerHTML = `<div class="player-card">${avHtml(pid)}<div><h3>${esc(p.full_name)}</h3><div class="muted">${[roleLabel(p.playing_role), p.bio].filter(Boolean).map(esc).join(" · ") || "No playing role set — edit it from your account."}</div></div><div style="margin-left:auto;text-align:right"><div class="eyebrow">MATCHES</div><div style="font:400 34px var(--score)">${c.played}</div></div></div>
+      <div class="stat hi"><b>${c.runs}</b><span>RUNS</span></div><div class="stat"><b>${c.hs}</b><span>HIGH SCORE</span></div><div class="stat"><b>${c.sr}</b><span>STRIKE RATE</span></div><div class="stat"><b>${c.avg}</b><span>AVERAGE</span></div><div class="stat"><b>${c.fours}/${c.sixes}</b><span>4s / 6s</span></div><div class="stat"><b>${c.inns}</b><span>INNINGS</span></div>
+      <div class="stat hi"><b>${c.wk}</b><span>WICKETS</span></div><div class="stat"><b>${oversFmt(c.bb)}</b><span>OVERS BOWLED</span></div><div class="stat"><b>${c.econ}</b><span>ECONOMY</span></div><div class="stat"><b>${c.conc}</b><span>RUNS CONCEDED</span></div><div class="stat"><b>${c.mom}</b><span>PLAYER OF MATCH</span></div><div class="stat"><b>${c.inns ? Math.round(c.runs / c.inns) : 0}</b><span>RUNS / INNINGS</span></div>`;
+    $("statsMatches").innerHTML = c.per.length ? `<table><thead><tr><th>MATCH</th><th>BATTING</th><th>BOWLING</th><th>RESULT</th></tr></thead><tbody>${c.per.slice().reverse().slice(0, 20).map(x => `<tr><td><b>${esc(x.m.venue)}</b><small class="muted"> · ${dateShort(x.m.match_date)}</small></td><td>${x.b ? `${x.b.runs}${x.b.out ? "" : "*"} (${x.b.balls})` : "—"}</td><td>${x.bw ? `${x.bw.wkts}/${x.bw.runs} (${oversFmt(x.bw.balls)})` : "—"}</td><td class="muted">${esc(x.m.result_text || (x.m.play_status === "live" ? "live" : ""))}${x.m.mom_profile_id === pid ? " ⭐" : ""}</td></tr>`).join("")}</tbody></table>` : '<div class="empty">No ball-by-ball data yet for this player.</div>';
+    const rows = members.filter(m => m.approved).map(m => ({ m, c: careerStats(m.id) })).filter(x => x.c.runs || x.c.wk || x.c.mom);
+    rows.sort((a, b) => lbMode === "runs" ? b.c.runs - a.c.runs : lbMode === "wickets" ? b.c.wk - a.c.wk : b.c.mom - a.c.mom);
+    $("leaderboard").innerHTML = rows.length ? `<table><thead><tr><th>#</th><th>PLAYER</th><th>${lbMode === "runs" ? "RUNS" : lbMode === "wickets" ? "WKTS" : "MOM"}</th><th>${lbMode === "runs" ? "SR" : lbMode === "wickets" ? "ECON" : "MATCHES"}</th></tr></thead><tbody>${rows.slice(0, 15).map((x, i) => `<tr><td>${i + 1}</td><td>${avHtml(x.m.id, "msg-av")}${esc(x.m.full_name)}</td><td><b>${lbMode === "runs" ? x.c.runs : lbMode === "wickets" ? x.c.wk : x.c.mom}</b></td><td class="muted">${lbMode === "runs" ? x.c.sr : lbMode === "wickets" ? x.c.econ : x.c.played}</td></tr>`).join("")}</tbody></table>` : '<div class="empty">Leaderboard fills up once matches are scored ball-by-ball.</div>';
   }
   function go(page) {
     if ((page === "members" || page === "reports") && !isAdmin()) page = "overview";
@@ -485,7 +580,7 @@
     currentPage = page;
     document.querySelectorAll(".page").forEach(p => p.classList.toggle("active", p.id === `page-${page}`));
     document.querySelectorAll(".nav-link[data-page]").forEach(b => b.classList.toggle("active", b.dataset.page === page));
-    const labels = { overview: ["PAVILION", "Overview"], members: ["THE SQUAD", "Members"], wallet: ["KIDDY BANK", isAdmin() ? "Wallets" : "My wallet"], deposits: ["TOP-UPS", "Deposits"], matches: ["FIXTURES", "Matches"], live: ["SCOREBOARD", "Live"], chat: ["DRESSING ROOM", "Club chat"], reports: ["CLUB INSIGHTS", "Reports"] };
+    const labels = { stats: ["CAREER", "Stats"], overview: ["PAVILION", "Overview"], members: ["THE SQUAD", "Members"], wallet: ["KIDDY BANK", isAdmin() ? "Wallets" : "My wallet"], deposits: ["TOP-UPS", "Deposits"], matches: ["FIXTURES", "Matches"], live: ["SCOREBOARD", "Live"], chat: ["DRESSING ROOM", "Club chat"], reports: ["CLUB INSIGHTS", "Reports"] };
     $("pageEyebrow").textContent = labels[page][0]; $("pageTitle").textContent = labels[page][1]; $("sidebar").classList.remove("open");
     if (page === "chat" && profile) { markChatRead(); const el = $("chatList"); el.scrollTop = el.scrollHeight; }
     window.scrollTo({ top: 0 });
@@ -615,10 +710,16 @@
       const undo = e.target.closest("[data-undo]"); if (undo && await confirmDialog("Undo last ball?", "The last recorded delivery will be removed.", "Undo")) await rpc("undo_ball", { p_match_id: undo.dataset.undo, p_innings_no: Number(undo.dataset.innings) }, "Last ball removed.");
       const ei = e.target.closest("[data-end-innings]"); if (ei) { const m = matches.find(x => x.id === ei.dataset.endInnings); const i = m && inningsOf(m).find(x => x.innings_no === Number(ei.dataset.innings)); if (i && await confirmDialog("End innings?", `${tname(m, i.batting_team)} finish on ${i.runs}/${i.wickets} (${oversFmt(i.balls)} ov).`, "End innings")) await rpc("set_innings_total", { p_match_id: m.id, p_innings_no: i.innings_no, p_runs: i.runs, p_wickets: i.wickets, p_overs: Number(`${Math.floor(i.balls / 6)}.${i.balls % 6}`), p_completed: true }, "Innings closed."); }
       const bb = e.target.closest("[data-ball]"); if (bb) { const panel = bb.closest("[data-scorer]"); bb.disabled = true; try { await scoreBall(panel.dataset.scorer, panel.dataset.innings, bb.dataset.ball, bb.dataset.runs); } finally { bb.disabled = false; } }
+      const sw = e.target.closest("[data-swap]"); if (sw) { const st = scorerSel[sw.dataset.swap] ||= {}; [st.striker, st.nonStriker] = [st.nonStriker, st.striker]; saveScorer(); renderLive(); }
+      const mg = e.target.closest("[data-manage]"); if (mg) openManage(mg.dataset.manage);
+      const so = e.target.closest("[data-set-overs]"); if (so) { const v = prompt("Overs per side (1–50):", "10"); if (v) await rpc("set_match_overs", { p_match_id: so.dataset.setOvers, p_overs: Number(v) }, "Overs set."); }
+      const lb = e.target.closest("[data-lb]"); if (lb) { lbMode = lb.dataset.lb; document.querySelectorAll("[data-lb]").forEach(b => b.classList.toggle("active", b === lb)); renderStats(); }
+      if (e.target.id === "accountBtn" || e.target.closest("#accountBtn")) openAccount();
+      if (e.target.id === "clearChatBtn") { const v = prompt("Delete group-chat messages older than how many days? (0 = clear everything)", "7"); if (v !== null) { const n = await rpc("admin_clear_chat", { p_older_than_days: Number(v) }); toast(`Deleted ${n} message${n === 1 ? "" : "s"}.`); } }
       const dm = e.target.closest("[data-del-msg]"); if (dm && await confirmDialog("Delete message?", "This removes the message for everyone.", "Delete")) { const { error } = await db.rpc("delete_message", { p_message_id: dm.dataset.delMsg }); if (error) throw error; messages = messages.filter(x => x.id !== dm.dataset.delMsg); renderChat(); renderCentre(); }
     } catch (err) { fail(err); }
   });
-  document.addEventListener("change", e => { const sel = e.target.closest("[data-sel]"); if (sel) { const panel = sel.closest("[data-scorer]"); if (panel) { (scorerSel[panel.dataset.scorer] ||= {})[sel.dataset.sel] = sel.dataset.sel === "extraRuns" ? Number(sel.value) : sel.value; } } });
+  document.addEventListener("change", e => { const sel = e.target.closest("[data-sel]"); if (sel) { const panel = sel.closest("[data-scorer]"); if (panel) { const st = scorerSel[panel.dataset.key] ||= {}; st[sel.dataset.sel] = sel.dataset.sel === "extraRuns" ? Number(sel.value) : sel.value; if (sel.dataset.sel === "striker" && st.nonStriker === st.striker) st.nonStriker = null; if (sel.dataset.sel === "nonStriker" && st.striker === st.nonStriker) st.striker = null; saveScorer(); renderLive(); } } });
 
   const notReady = () => { if (!db) { toast("Not connected yet: add your Supabase URL and anon key to js/config.js first (README step 1–2).", true); return true; } return false; };
   $("signInForm").addEventListener("submit", async e => { e.preventDefault(); if (notReady()) return; busy(e.target, true); try { const { error } = await db.auth.signInWithPassword({ email: $("loginEmail").value.trim(), password: $("loginPassword").value }); if (error) throw error; } catch (err) { fail(err); } finally { busy(e.target, false); } });
@@ -699,7 +800,8 @@
       let matchId = id;
       if (id) { const { error } = await db.rpc("admin_update_match", { p_match_id: id, ...args }); if (error) throw error; }
       else { const { data, error } = await db.rpc("admin_create_match", { ...args, p_open_voting: voting }); if (error) throw error; matchId = data; }
-      const det = { p_match_id: matchId, p_start_time: $("matchTime").value || null, p_venue_url: $("matchVenueUrl").value.trim() || null, p_overs: Number($("matchOvers").value || 10), p_captain_a: $("captainA").value || null, p_captain_b: $("captainB").value || null, p_team_a_name: $("teamAName").value.trim() || null, p_team_b_name: $("teamBName").value.trim() || null };
+      if ($("matchTime").value && $("matchEndTime").value && $("matchEndTime").value <= $("matchTime").value) throw new Error("End time must be after the start time.");
+      const det = { p_match_id: matchId, p_start_time: $("matchTime").value || null, p_end_time: $("matchEndTime").value || null, p_venue_url: $("matchVenueUrl").value.trim() || null, p_overs: $("matchOvers").value ? Number($("matchOvers").value) : null, p_captain_a: $("captainA").value || null, p_captain_b: $("captainB").value || null, p_team_a_name: $("teamAName").value.trim() || null, p_team_b_name: $("teamBName").value.trim() || null };
       const d = await db.rpc("admin_set_match_details", det); if (d.error) throw d.error;
       toast(id ? "Match updated." : voting ? "Match proposed. Every member has been notified to vote." : "Match created. Review it and settle when ready.");
       await refreshAll(); closeDialog("matchDialog");
@@ -708,11 +810,20 @@
   $("settleForm").addEventListener("submit", async e => { e.preventDefault(); busy(e.target, true); try { await rpc("admin_settle_match", { p_match_id: $("settleMatchId").value }, "Match settled. Wallets have been updated."); closeDialog("settleDialog"); } catch (err) { fail(err); } finally { busy(e.target, false); } });
   $("reviewForm").addEventListener("submit", async e => { e.preventDefault(); busy(e.target, true); try { await rpc("admin_review_deposit", { p_request_id: $("reviewId").value, p_approve: true, p_note: $("reviewNote").value.trim() }, "Deposit approved and wallet credited."); closeDialog("reviewDialog"); } catch (err) { fail(err); } finally { busy(e.target, false); } });
   $("rejectBtn").addEventListener("click", async () => { try { await rpc("admin_review_deposit", { p_request_id: $("reviewId").value, p_approve: false, p_note: $("reviewNote").value.trim() }, "Request rejected."); closeDialog("reviewDialog"); } catch (err) { fail(err); } });
-  $("tossForm").addEventListener("submit", async e => { e.preventDefault(); busy(e.target, true); try { await rpc("start_match", { p_match_id: $("tossMatchId").value, p_toss_winner: $("tossWinner").value, p_toss_decision: $("tossDecision").value }, "Match is live! Everyone has been notified."); closeDialog("tossDialog"); go("live"); } catch (err) { fail(err); } finally { busy(e.target, false); } });
+  $("tossForm").addEventListener("submit", async e => { e.preventDefault(); busy(e.target, true); try { await rpc("start_match", { p_match_id: $("tossMatchId").value, p_toss_winner: $("tossWinner").value, p_toss_decision: $("tossDecision").value, p_overs: Number($("tossOvers").value) }, "Match is live! Everyone has been notified."); closeDialog("tossDialog"); go("live"); } catch (err) { fail(err); } finally { busy(e.target, false); } });
   $("endForm").addEventListener("submit", async e => { e.preventDefault(); busy(e.target, true); try { await rpc("end_match", { p_match_id: $("endMatchId").value, p_winner: $("endWinner").value || null, p_result_text: $("endText").value.trim() || null, p_mom: $("endMom").value || null }, "Result recorded and everyone notified. 🏆"); closeDialog("endDialog"); go("matches"); } catch (err) { fail(err); } finally { busy(e.target, false); } });
   $("totalsForm").addEventListener("submit", async e => { e.preventDefault(); busy(e.target, true); try { await rpc("set_innings_total", { p_match_id: $("totalsMatchId").value, p_innings_no: Number($("totalsInnings").value), p_runs: Number($("totalsRuns").value), p_wickets: Number($("totalsWkts").value), p_overs: Number($("totalsOvers").value), p_completed: $("totalsDone").checked }, "Score updated."); closeDialog("totalsDialog"); } catch (err) { fail(err); } finally { busy(e.target, false); } });
   $("chatForm").addEventListener("submit", async e => { e.preventDefault(); const body = $("chatInput").value.trim(); if (!body) return; $("chatInput").value = ""; try { const { data, error } = await db.rpc("post_message", { p_body: body, p_match_id: null }); if (error) throw error; const r = await db.from("messages").select("id,profile_id,match_id,kind,body,created_at").eq("id", data).maybeSingle(); if (r.data && !messages.some(y => y.id === r.data.id)) { messages.push(r.data); renderChat(); } } catch (err) { fail(err); $("chatInput").value = body; } });
   $("centreChatForm").addEventListener("submit", async e => { e.preventDefault(); const body = $("centreChatInput").value.trim(); if (!body) return; $("centreChatInput").value = ""; try { const { error } = await db.rpc("post_message", { p_body: body, p_match_id: $("centreMatchId").value }); if (error) throw error; const r = await db.from("messages").select("id,profile_id,match_id,kind,body,created_at").eq("match_id", $("centreMatchId").value).order("created_at"); if (!r.error) { r.data.forEach(x => { if (!messages.some(y => y.id === x.id)) messages.push(x); }); renderCentre(); const c = $("centreChat"); c.scrollTop = c.scrollHeight; } } catch (err) { fail(err); $("centreChatInput").value = body; } });
+  $("statsPlayer").addEventListener("change", () => { statsFor = $("statsPlayer").value; renderStats(); });
+  $("accPhoto").addEventListener("change", async () => {
+    const f = $("accPhoto").files[0]; if (!f) return;
+    try { $("accPhotoHint").textContent = "Uploading…"; const blob = await resizeImage(f); const path = `${profile.id}/avatar-${Date.now()}.jpg`;
+      const up = await db.storage.from("avatars").upload(path, blob, { contentType: "image/jpeg", upsert: true }); if (up.error) throw up.error;
+      const { data } = db.storage.from("avatars").getPublicUrl(path); $("accAvatar").dataset.url = data.publicUrl; $("accAvatar").innerHTML = `<img src="${esc(data.publicUrl)}" alt="">`; $("accPhotoHint").textContent = "Photo uploaded — click Save profile.";
+    } catch (err) { $("accPhotoHint").textContent = "Upload failed: " + (err.message || err); }
+  });
+  $("accountForm").addEventListener("submit", async e => { e.preventDefault(); busy(e.target, true); try { await rpc("update_my_profile", { p_full_name: $("accName").value.trim(), p_phone: $("accPhone").value.trim(), p_playing_role: $("accRole").value || null, p_avatar_url: $("accAvatar").dataset.url || null, p_bio: $("accBio").value.trim() }, "Profile saved."); profile = members.find(m => m.id === profile.id) || profile; renderHeader(); closeDialog("accountDialog"); } catch (err) { fail(err); } finally { busy(e.target, false); } });
   $("exportCsv").addEventListener("click", exportSummaryCsv); $("exportLedgerCsv").addEventListener("click", exportLedgerCsv);
   $("menuToggle").addEventListener("click", () => $("sidebar").classList.toggle("open"));
   $("bellBtn").addEventListener("click", () => $("notifPanel").classList.toggle("hidden"));

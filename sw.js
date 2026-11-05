@@ -1,7 +1,7 @@
 // Finstack Turf service worker: makes the app installable and loads the shell fast.
 // Data always comes live from Supabase; nothing financial is cached.
-const CACHE = "finstack-turf-v4.0";
-const SHELL = ["./", "./index.html", "./css/style.css?v=4.0", "./js/config.js?v=4.0", "./js/app.js?v=4.0", "./manifest.json", "./icons/icon-192.png", "./icons/icon-512.png"];
+const CACHE = "finstack-turf-v4.1";
+const SHELL = ["./", "./index.html", "./css/style.css?v=4.1", "./js/config.js?v=4.1", "./js/app.js?v=4.1", "./manifest.json", "./icons/icon-192.png", "./icons/icon-512.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener("fetch", e => {
@@ -14,10 +14,17 @@ self.addEventListener("fetch", e => {
 self.addEventListener("push", e => {
   let d = {}; try { d = e.data ? e.data.json() : {}; } catch (_) { d = { title: "Finstack Turf", body: e.data ? e.data.text() : "" }; }
   const title = d.title || "Finstack Turf";
-  e.waitUntil(self.registration.showNotification(title, {
-    body: d.body || "", icon: "./icons/icon-192.png", badge: "./icons/icon-192.png", tag: d.tag || undefined, renotify: !!d.tag,
-    data: { url: d.url || "./" }, vibrate: [100, 50, 100]
-  }));
+  e.waitUntil((async () => {
+    // Live-score updates: skip the alert if the app is open on screen (the user already sees the scoreboard).
+    if (d.kind === "score") {
+      const cs = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      if (cs.some(c => c.visibilityState === "visible")) return;
+    }
+    await self.registration.showNotification(title, {
+      body: d.body || "", icon: "./icons/icon-192.png", badge: "./icons/icon-192.png", tag: d.tag || undefined, renotify: d.kind !== "score" && !!d.tag,
+      silent: d.kind === "score", data: { url: d.url || "./" }, vibrate: d.kind === "score" ? undefined : [100, 50, 100]
+    });
+  })());
 });
 self.addEventListener("notificationclick", e => {
   e.notification.close();

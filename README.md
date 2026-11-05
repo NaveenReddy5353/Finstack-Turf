@@ -1,4 +1,4 @@
-# Finstack Turf — Kiddy Bank (v3)
+# Finstack Turf — Stadium (v4.1)
 
 A private club app for the weekly cricket crew: members, a shared "Kiddy Bank" wallet per player,
 deposit requests, match attendance, automatic cost splitting, one-click settlement and reports.
@@ -20,6 +20,9 @@ finstack-turf/
 ├── database/upgrade-v3.sql  # ← run this on a project created with v2
 ├── email-templates/magic-link.html  # ← paste into Supabase email templates
 ├── database/upgrade-v4-push.sql     # ← push notifications tables
+├── database/upgrade-v5-activity.sql # ← club-wide activity notifications
+├── database/upgrade-v6-stadium.sql  # ← fixtures details, teams, live scoring, chat
+├── database/upgrade-v7-players.sql  # ← timing, profiles/photos, chat retention, auto-MoM
 ├── supabase/functions/push-notify/index.ts  # ← Edge Function (paste into Supabase)
 ├── manifest.json, sw.js, icons/     # installable app (PWA)
 └── README.md
@@ -105,6 +108,33 @@ Members who stop playing: **Edit → Status = Inactive**. They keep their histor
 
 Example: five players have ₹500 each. Four attend a ₹1,200 match → each attendee is charged ₹300; balances become ₹200 ×4 and ₹500 for the absent player.
 
+## 6e. Stadium features (v4)
+
+**Fixtures** — a match now carries a start time, a Google Maps link, overs per side, two team names and two captains (set when creating or editing the match). Members voting can add a suggestion (other time / venue / day); it is posted in the match's comment thread and in the activity feed.
+
+**Line-ups** — once voting closes (team sheet locked), the two captains (or the admin) open the match centre → *Line-ups* and assign players to their team (or hit *Shuffle evenly*). Everyone is notified when line-ups change.
+
+**Live scoreboard** — a captain or the admin presses *Start match*, enters the toss, and the match goes live for the whole club (Live scoreboard page, bell alert, push). Scoring works two ways and can be mixed: tap ball-by-ball (0–6, Wd, Nb, Bye, LB, W with striker/bowler selected — batting and bowling tables build automatically) or *Type totals* (runs/wickets/overs). *Undo last ball*, *End innings*, then *End match* with winner (auto by runs), result text and player of the match. Admin can *Reopen result* to correct a score.
+
+**History** — Fixtures → *History* shows every completed match with both scores, result, captains and player of the match; *Scorecard* opens the full card. Reports count matches played and player-of-the-match awards.
+
+**Dressing room** — a club-wide chat (like the WhatsApp group) plus a comment thread inside every match centre. Messages arrive live; you can delete your own (admin can delete any).
+
+Database: run `database/upgrade-v6-stadium.sql` once (idempotent). All earlier features and data stay as they are.
+
+## 6f. v4.1 additions
+
+- **Match timing** from–to; **overs** are set when the match is started (toss) — or in the match centre once the team is locked — not at creation.
+- **Real-cricket scoring**: striker / non-striker / bowler at the crease; strike rotates on odd runs and at the end of each over; a dismissed batter goes to the *bench* and can't be picked again; a wicket prompts for the new batter and a completed over prompts for the next bowler (same bowler can't bowl consecutive overs). Scorer selections survive a page refresh.
+- **Live-score push**: one evolving phone alert per match ("🔴 Lions 45/2 (5.3 ov)") updated on every ball, only when the app is not open on screen. Needs a second webhook (see 6d step 8).
+- **Squad → Manage**: one large button per member opens a sheet with Approve / Edit / Wallet / Invite / Delete — easy on phones.
+- **My account** (tap your name/avatar): name, mobile, playing role (batter / bowler / all-rounder / keeper), bio and a profile photo (stored in Supabase Storage bucket `avatars`).
+- **Player of the match** is chosen automatically from the ball-by-ball data (runs + boundaries + 20/wicket − economy penalty); the admin can override in the End match dialog.
+- **My stats**: career numbers for any member (matches, innings, runs, HS, SR, average, 4s/6s, wickets, overs, economy, MoM) plus Runs / Wickets / MoM leaderboards.
+- **Chat retention**: group-chat messages older than 7 days are deleted nightly (Supabase `pg_cron`); match comment threads are kept. Admin also has **Clear chat…**. Change the days in `upgrade-v7-players.sql` (search `interval '7 days'`).
+
+Database: run `database/upgrade-v7-players.sql` once. If it reports that `pg_cron` is not available, enable it under **Database → Extensions** and re-run.
+
 ## 6a. Match voting (v3)
 
 1. Admin → **Matches → ＋ New match**, keep **"Open for voting"** ticked, enter date, venue and expected cost, save.
@@ -129,7 +159,8 @@ The bell at the top shows unread notifications: new match to vote on, reminders,
 4. **Edge Function:** Supabase → **Edge Functions → Deploy a new function → Via Editor**. Name it `push-notify`, paste `supabase/functions/push-notify/index.ts`, and deploy. In the function's settings turn **Verify JWT** off (the webhook authenticates with the secret header instead).
 5. **Secrets:** Edge Functions → **Secrets** → add `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (mailto:your email), `PUSH_WEBHOOK_SECRET`, `APP_URL` (values from the keys file).
 6. **Webhook:** Supabase → **Integrations → Database Webhooks → Create a new hook**: name `push-notify`, table `notifications`, events **Insert**, type **HTTP Request**, method POST, URL = the function URL (`https://<project-ref>.supabase.co/functions/v1/push-notify`), HTTP headers: `Content-Type: application/json` and `x-webhook-secret: <secret>`. Save.
-7. Test: open the app on your phone, bell → **Enable push alerts** → allow. Close the app completely. From another device create a voting match; the phone should buzz with "New match: are you in?". Tap it → app opens on Matches.
+7. Test: open the app on your phone, bell → **Enable push alerts** → allow.
+8. **Live-score alerts (v4.1):** add a second Database Webhook exactly like the first but on table `match_innings`, events **Insert** and **Update**, same URL and same `x-webhook-secret` header. Re-deploy the Edge Function with the v4.1 `index.ts`. Close the app completely. From another device create a voting match; the phone should buzz with "New match: are you in?". Tap it → app opens on Matches.
 
 Delivery is handled by Google/Apple/Mozilla push services; nothing is sent via email or SMS and there is no cost.
 
