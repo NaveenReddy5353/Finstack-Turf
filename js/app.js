@@ -1,6 +1,6 @@
 (() => {
   "use strict";
-  const APP_VERSION = "3.1";
+  const APP_VERSION = "3.2";
   const cfg = window.FINSTACK_CONFIG || {};
   const configured = cfg.SUPABASE_URL && !cfg.SUPABASE_URL.includes("YOUR-PROJECT") &&
     cfg.SUPABASE_ANON_KEY && !cfg.SUPABASE_ANON_KEY.includes("YOUR_SUPABASE");
@@ -94,7 +94,7 @@
   function renderBell() {
     const unread = notifications.filter(n => !n.read).length;
     $("bellBadge").textContent = unread > 99 ? "99+" : unread; $("bellBadge").classList.toggle("hidden", !unread);
-    const icons = { vote: "🗳", match: "🏏", wallet: "₹", deposit: "↧", admin: "★", info: "•" };
+    const icons = { vote: "🗳", match: "🏏", wallet: "₹", deposit: "↧", admin: "★", activity: "👥", info: "•" };
     $("notifList").innerHTML = notifications.length ? notifications.slice(0, 40).map(n => `<button class="notif ${n.read ? "" : "unread"}" data-notif="${n.id}" data-notif-match="${n.match_id || ""}" data-notif-kind="${esc(n.kind)}"><span class="notif-icon">${icons[n.kind] || "•"}</span><span><b>${esc(n.title)}</b><small>${esc(n.body || "")}</small><em>${dtFmt(n.created_at)}</em></span></button>`).join("") : '<div class="empty">No notifications yet.</div>';
     renderAlertsState();
   }
