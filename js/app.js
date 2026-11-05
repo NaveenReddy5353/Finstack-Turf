@@ -1,6 +1,6 @@
 (() => {
   "use strict";
-  const APP_VERSION = "3.0";
+  const APP_VERSION = "3.1";
   const cfg = window.FINSTACK_CONFIG || {};
   const configured = cfg.SUPABASE_URL && !cfg.SUPABASE_URL.includes("YOUR-PROJECT") &&
     cfg.SUPABASE_ANON_KEY && !cfg.SUPABASE_ANON_KEY.includes("YOUR_SUPABASE");
@@ -10,12 +10,13 @@
   const linkParams = new URLSearchParams((location.hash.startsWith("#") ? location.hash.slice(1) : "") + "&" + location.search.slice(1));
   const arrivedVia = linkParams.get("type");
   const linkError = linkParams.get("error_description");
+  const linkPage = new URLSearchParams(location.search).get("page");
 
   // ---------------------------------------------------------------- state
   let db, user, profile;
   let members = [], transactions = [], matches = [], requests = [], votes = [], notifications = [];
   let realtimeChannel = null, refreshTimer = null, installPrompt = null;
-  let currentPage = "overview";
+  let currentPage = ["overview","members","wallet","deposits","matches","reports"].includes(linkPage) ? linkPage : "overview";
 
   // -------------------------------------------------------------- helpers
   const money = n => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(Number(n || 0));
@@ -95,7 +96,7 @@
     $("bellBadge").textContent = unread > 99 ? "99+" : unread; $("bellBadge").classList.toggle("hidden", !unread);
     const icons = { vote: "🗳", match: "🏏", wallet: "₹", deposit: "↧", admin: "★", info: "•" };
     $("notifList").innerHTML = notifications.length ? notifications.slice(0, 40).map(n => `<button class="notif ${n.read ? "" : "unread"}" data-notif="${n.id}" data-notif-match="${n.match_id || ""}" data-notif-kind="${esc(n.kind)}"><span class="notif-icon">${icons[n.kind] || "•"}</span><span><b>${esc(n.title)}</b><small>${esc(n.body || "")}</small><em>${dtFmt(n.created_at)}</em></span></button>`).join("") : '<div class="empty">No notifications yet.</div>';
-    $("enableAlertsBtn").classList.toggle("hidden", !("Notification" in window) || Notification.permission === "granted");
+    renderAlertsState();
   }
   function renderHeader() {
     $("topUserName").textContent = profile.full_name || user.email; $("topUserRole").textContent = isAdmin() ? "ADMIN" : "MEMBER";
@@ -320,7 +321,7 @@
     $("configNote").textContent = "Secure sign-in powered by Supabase. · v" + APP_VERSION;
     let booted = false, pendingPw = null;
     const boot = async session => {
-      if (session?.user) { user = session.user; if (await getProfile()) { showApp(); await refreshAll(); go(currentPage); startRealtime(); if (pendingPw) { const f = pendingPw === "forced"; pendingPw = null; openSetPassword(f); } } }
+      if (session?.user) { user = session.user; if (await getProfile()) { showApp(); await refreshAll(); go(currentPage); startRealtime(); if ("Notification" in window && Notification.permission === "granted") pushSubscribe(false).catch(console.warn); if (pendingPw) { const f = pendingPw === "forced"; pendingPw = null; openSetPassword(f); } } }
       else { user = null; profile = null; stopRealtime(); showAuth(); }
     };
     db.auth.onAuthStateChange((event, session) => {
@@ -334,13 +335,33 @@
     const { data: { session }, error } = await db.auth.getSession(); if (error) throw error;
     if (!booted) await boot(session);
   }
+  // ---- push notifications (work even when the app is closed) ----
+  const urlB64ToU8 = b => { const p = "=".repeat((4 - b.length % 4) % 4); const r = atob((b + p).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from([...r].map(c => c.charCodeAt(0))); };
+  const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window && cfg.VAPID_PUBLIC_KEY && !String(cfg.VAPID_PUBLIC_KEY).includes("YOUR_");
+  async function pushSubscribe(interactive) {
+    if (!pushSupported()) { if (interactive) toast(cfg.VAPID_PUBLIC_KEY ? "Push alerts are not supported in this browser. On iPhone, add the app to the Home Screen first." : "Push alerts are not configured yet (VAPID_PUBLIC_KEY missing in config.js).", true); return false; }
+    const perm = interactive ? await Notification.requestPermission() : Notification.permission;
+    if (perm !== "granted") { if (interactive) toast("Notifications were not allowed. You can enable them in your browser's site settings.", true); return false; }
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToU8(cfg.VAPID_PUBLIC_KEY) });
+    const j = sub.toJSON();
+    const { error } = await db.rpc("save_push_subscription", { p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth, p_user_agent: navigator.userAgent });
+    if (error) throw error;
+    try { localStorage.setItem("ft_push_" + profile.id, "1"); } catch (_) {}
+    return true;
+  }
+  function renderAlertsState() {
+    const on = pushSupported() && Notification.permission === "granted" && (() => { try { return !!localStorage.getItem("ft_push_" + profile.id); } catch (_) { return false; } })();
+    $("enableAlertsBtn").classList.toggle("hidden", on || !("Notification" in window)); $("alertsOn").classList.toggle("hidden", !on);
+  }
   function scheduleRefresh() { clearTimeout(refreshTimer); refreshTimer = setTimeout(() => refreshAll().catch(console.error), 400); }
   function startRealtime() {
     stopRealtime(); if (!db.channel) return;
     realtimeChannel = db.channel("finstack-live")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications", filter: `profile_id=eq.${profile.id}` }, payload => {
         const n = payload.new; notifications.unshift(n); renderBell(); toast(`🔔 ${n.title}`);
-        if ("Notification" in window && Notification.permission === "granted") { try { new Notification(n.title, { body: n.body || "", icon: "icons/icon-192.png", tag: n.id }); } catch (_) {} }
+        if ("Notification" in window && Notification.permission === "granted" && !pushSupported()) { try { new Notification(n.title, { body: n.body || "", icon: "icons/icon-192.png", tag: n.id }); } catch (_) {} }
         scheduleRefresh();
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "match_votes" }, scheduleRefresh)
@@ -469,7 +490,8 @@
   $("menuToggle").addEventListener("click", () => $("sidebar").classList.toggle("open"));
   $("bellBtn").addEventListener("click", () => $("notifPanel").classList.toggle("hidden"));
   $("markAllRead").addEventListener("click", async () => { notifications.forEach(n => n.read = true); renderBell(); try { const { error } = await db.rpc("mark_notifications_read", { p_ids: null }); if (error) throw error; } catch (err) { fail(err); } });
-  $("enableAlertsBtn").addEventListener("click", async () => { try { const r = await Notification.requestPermission(); toast(r === "granted" ? "Alerts enabled for this device while the app is open." : "Alerts not enabled.", r !== "granted"); renderBell(); } catch (err) { fail(err); } });
+  $("enableAlertsBtn").addEventListener("click", async () => { try { if (await pushSubscribe(true)) toast("Push alerts enabled on this device — you'll get match alerts even when the app is closed."); renderBell(); } catch (err) { fail(err); } });
+  if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", e => { if (e.data?.type === "navigate") { const pg = new URL(e.data.url).searchParams.get("page"); if (pg) go(pg); } });
   $("matchVoting").addEventListener("change", () => toggleVotingUi($("matchVoting").checked));
   window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installPrompt = e; $("installBtn").classList.remove("hidden"); });
   $("installBtn").addEventListener("click", async () => { if (!installPrompt) return; installPrompt.prompt(); await installPrompt.userChoice; installPrompt = null; $("installBtn").classList.add("hidden"); });

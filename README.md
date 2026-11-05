@@ -19,6 +19,8 @@ finstack-turf/
 ├── database/schema.sql # ← run once in Supabase SQL Editor
 ├── database/upgrade-v3.sql  # ← run this on a project created with v2
 ├── email-templates/magic-link.html  # ← paste into Supabase email templates
+├── database/upgrade-v4-push.sql     # ← push notifications tables
+├── supabase/functions/push-notify/index.ts  # ← Edge Function (paste into Supabase)
 ├── manifest.json, sw.js, icons/     # installable app (PWA)
 └── README.md
 ```
@@ -113,9 +115,23 @@ Example: five players have ₹500 each. Four attend a ₹1,200 match → each at
 
 Untick "Open for voting" to create a match the old way (admin picks the attendees).
 
-## 6b. Notifications
+## 6b. Notifications and push alerts
 
-The bell at the top shows unread notifications: new match to vote on, reminders, team sheet locked (with your share), match settled, deposit approved/rejected, and — for admins — new deposit requests and voting closed. They update live while the app is open. Click **Enable alerts** in the bell panel to also get a system pop-up while the app is open. (Push alerts while the app is fully closed are not part of this version.)
+The bell at the top shows unread notifications: new match to vote on, reminders, team sheet locked (with your share), match settled, deposit approved/rejected, and — for admins — new deposit requests and voting closed. They update live while the app is open.
+
+**Push alerts (app closed)** — like a WhatsApp message: the phone shows the alert, tapping it opens the app on the right page. Each member taps **Enable push alerts** in the bell panel once per device. Works on Android (Chrome) and on iPhone once the app is added to the Home Screen (iOS 16.4+). One-time setup by the admin (section 6d).
+
+### 6d. Push alert setup (admin, one time)
+
+1. **Keys:** `push-keys-DO-NOT-UPLOAD.txt` (generated for you, kept outside the repo) holds a public key, a private key and a webhook secret. Never commit the private key or secret.
+2. **Database:** run `database/upgrade-v4-push.sql` in the Supabase SQL Editor.
+3. **config.js:** add `VAPID_PUBLIC_KEY: "<public key>"` and upload the file to GitHub (this key is public by design).
+4. **Edge Function:** Supabase → **Edge Functions → Deploy a new function → Via Editor**. Name it `push-notify`, paste `supabase/functions/push-notify/index.ts`, and deploy. In the function's settings turn **Verify JWT** off (the webhook authenticates with the secret header instead).
+5. **Secrets:** Edge Functions → **Secrets** → add `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (mailto:your email), `PUSH_WEBHOOK_SECRET`, `APP_URL` (values from the keys file).
+6. **Webhook:** Supabase → **Integrations → Database Webhooks → Create a new hook**: name `push-notify`, table `notifications`, events **Insert**, type **HTTP Request**, method POST, URL = the function URL (`https://<project-ref>.supabase.co/functions/v1/push-notify`), HTTP headers: `Content-Type: application/json` and `x-webhook-secret: <secret>`. Save.
+7. Test: open the app on your phone, bell → **Enable push alerts** → allow. Close the app completely. From another device create a voting match; the phone should buzz with "New match: are you in?". Tap it → app opens on Matches.
+
+Delivery is handled by Google/Apple/Mozilla push services; nothing is sent via email or SMS and there is no cost.
 
 ## 6c. Install on phones (app icon)
 
@@ -145,6 +161,7 @@ Admins get a per-player summary (deposits, match charges, other debits, balance,
 - **Invite link opens a broken page / "otp expired"** → the link is single-use and expires in 1 hour; send a fresh one with *Resend invite*. Also check `APP_URL` in `js/config.js` and Supabase Redirect URLs match the deployed address.
 - **Voting / bell does nothing, console says table missing** → run `database/upgrade-v3.sql` in the SQL Editor (safe to re-run).
 - **Notifications don't appear live** → in Supabase → Database → Publications, make sure `supabase_realtime` includes `notifications`, `match_votes` and `matches` (upgrade-v3.sql adds them).
+- **Push alerts don't arrive** → check Edge Functions → push-notify → Logs after creating a match. `unauthorized` = webhook header secret ≠ PUSH_WEBHOOK_SECRET; `VAPID keys not configured` = secrets missing; `no devices registered` = the member hasn't tapped Enable push alerts on that phone; on iPhone the app must be opened from the Home Screen icon.
 - **"email rate limit exceeded"** → custom SMTP is not set up yet (section 5a) or the hourly limit under Rate Limits is too low.
 - **Confirmation / reset emails never arrive** → either turn off *Confirm email* in Supabase, or configure SMTP; also check Redirect URLs match the deployed address exactly.
 - **Settle fails with "Insufficient wallet balance: …"** → top up those players or remove them from attendance, then settle again.
@@ -152,6 +169,5 @@ Admins get a per-player summary (deposits, match charges, other debits, balance,
 ## 10. Ideas for later
 
 - Charge absentees or set custom shares per match.
-- True push notifications when the app is closed (needs a small server/Edge Function with Web Push).
 - Low-balance reminders.
 - PWA install / offline shell.

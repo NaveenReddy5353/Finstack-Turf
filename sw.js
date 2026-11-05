@@ -1,7 +1,7 @@
 // Finstack Turf service worker: makes the app installable and loads the shell fast.
 // Data always comes live from Supabase; nothing financial is cached.
-const CACHE = "finstack-turf-v3.0";
-const SHELL = ["./", "./index.html", "./css/style.css?v=3.0", "./js/config.js?v=3.0", "./js/app.js?v=3.0", "./manifest.json", "./icons/icon-192.png", "./icons/icon-512.png"];
+const CACHE = "finstack-turf-v3.1";
+const SHELL = ["./", "./index.html", "./css/style.css?v=3.1", "./js/config.js?v=3.1", "./js/app.js?v=3.1", "./manifest.json", "./icons/icon-192.png", "./icons/icon-512.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener("fetch", e => {
@@ -10,4 +10,21 @@ self.addEventListener("fetch", e => {
   // network-first for the shell so updates arrive on the next open; cache is the offline fallback
   e.respondWith(fetch(e.request).then(res => { const copy = res.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); return res; }).catch(() => caches.match(e.request).then(r => r || caches.match("./index.html"))));
 });
-self.addEventListener("notificationclick", e => { e.notification.close(); e.waitUntil(self.clients.matchAll({ type: "window" }).then(cs => cs.length ? cs[0].focus() : self.clients.openWindow("./"))); });
+// Push message from the push-notify Edge Function
+self.addEventListener("push", e => {
+  let d = {}; try { d = e.data ? e.data.json() : {}; } catch (_) { d = { title: "Finstack Turf", body: e.data ? e.data.text() : "" }; }
+  const title = d.title || "Finstack Turf";
+  e.waitUntil(self.registration.showNotification(title, {
+    body: d.body || "", icon: "./icons/icon-192.png", badge: "./icons/icon-192.png", tag: d.tag || undefined, renotify: !!d.tag,
+    data: { url: d.url || "./" }, vibrate: [100, 50, 100]
+  }));
+});
+self.addEventListener("notificationclick", e => {
+  e.notification.close();
+  const url = new URL((e.notification.data && e.notification.data.url) || "./", self.location.href).href;
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(cs => {
+    const c = cs.find(x => x.url.startsWith(self.registration.scope));
+    if (c) { c.focus(); return c.navigate ? c.navigate(url) : (c.postMessage({ type: "navigate", url }), undefined); }
+    return self.clients.openWindow(url);
+  }));
+});

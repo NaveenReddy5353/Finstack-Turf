@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=3.0">
+  <link rel="stylesheet" href="css/style.css?v=3.1">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -87,7 +87,7 @@
         <div><div class="eyebrow" id="pageEyebrow">TEAM CONTROL CENTER</div><h1 id="pageTitle">Overview</h1></div>
         <div class="top-actions">
           <button id="bellBtn" class="icon-btn bell" aria-label="Notifications">🔔<em id="bellBadge" class="bell-badge hidden">0</em></button>
-          <div id="notifPanel" class="notif-panel hidden"><div class="notif-head"><b>Notifications</b><div class="btn-row"><button class="text-btn" id="enableAlertsBtn">Enable alerts</button><button class="text-btn" id="markAllRead">Mark all read</button></div></div><div id="notifList" class="notif-list"><div class="empty">No notifications yet.</div></div></div>
+          <div id="notifPanel" class="notif-panel hidden"><div class="notif-head"><b>Notifications</b><div class="btn-row"><button class="text-btn" id="enableAlertsBtn">Enable push alerts</button><span class="muted hidden" id="alertsOn">✓ Push alerts on</span><button class="text-btn" id="markAllRead">Mark all read</button></div></div><div id="notifList" class="notif-list"><div class="empty">No notifications yet.</div></div></div>
         </div>
         <div class="top-user"><div class="top-user-copy"><b id="topUserName">Player</b><span id="topUserRole">MEMBER</span></div><div class="avatar" id="topAvatar">P</div></div>
       </header>
@@ -178,7 +178,7 @@
 
   <dialog id="confirmDialog" class="modal"><form id="confirmForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">PLEASE CONFIRM</span><h3 id="confirmTitle">Are you sure?</h3></div><button class="icon-btn" type="button" data-close="confirmDialog">×</button></div><p id="confirmText" class="muted"></p><div class="modal-actions"><button type="button" class="btn ghost" data-close="confirmDialog">Cancel</button><button class="btn primary danger-fill" type="submit" id="confirmOk">Yes, continue</button></div></form></dialog>
 
-  <script src="js/config.js?v=3.0"></script>
-  <script src="js/app.js?v=3.0"></script>
+  <script src="js/config.js?v=3.1"></script>
+  <script src="js/app.js?v=3.1"></script>
 </body>
 </html>
