@@ -1,5 +1,6 @@
 (() => {
   "use strict";
+  const APP_VERSION = "3.0";
   const cfg = window.FINSTACK_CONFIG || {};
   const configured = cfg.SUPABASE_URL && !cfg.SUPABASE_URL.includes("YOUR-PROJECT") &&
     cfg.SUPABASE_ANON_KEY && !cfg.SUPABASE_ANON_KEY.includes("YOUR_SUPABASE");
@@ -12,7 +13,8 @@
 
   // ---------------------------------------------------------------- state
   let db, user, profile;
-  let members = [], transactions = [], matches = [], requests = [];
+  let members = [], transactions = [], matches = [], requests = [], votes = [], notifications = [];
+  let realtimeChannel = null, refreshTimer = null, installPrompt = null;
   let currentPage = "overview";
 
   // -------------------------------------------------------------- helpers
@@ -48,28 +50,53 @@
     document.querySelectorAll(".member-only").forEach(el => el.classList.toggle("hidden", isAdmin()));
   }
   async function getProfile() {
-    const { data, error } = await db.from("profiles").select("*").eq("user_id", user.id).maybeSingle();
+    let { data, error } = await db.from("profiles").select("*").eq("user_id", user.id).maybeSingle();
     if (error) throw error;
+    if (!data) {
+      // No member record linked to this login yet (e.g. member re-added after the login existed): link by email.
+      const link = await db.rpc("link_my_profile"); if (link.error) throw link.error;
+      ({ data, error } = await db.from("profiles").select("*").eq("user_id", user.id).maybeSingle()); if (error) throw error;
+    }
     profile = data;
-    if (!profile) { await db.auth.signOut(); showAuth(); toast("Your profile is still being created. Please sign in again in a moment."); return false; }
+    if (!profile) { await db.auth.signOut(); showAuth(); toast("No member record found for this login. Ask the admin to add your email, then sign in again."); return false; }
     if (!profile.approved) { await db.auth.signOut(); showAuth(); toast("Your account is awaiting admin approval."); return false; }
     if (profile.active === false) { await db.auth.signOut(); showAuth(); toast("Your account has been marked inactive. Contact the admin."); return false; }
     return true;
   }
   async function refreshAll() {
-    const [m, t, ma, r] = await Promise.all([
+    const [m, t, ma, r, v, n] = await Promise.all([
       db.from("profiles").select("id,user_id,full_name,email,phone,role,approved,active,created_at").order("full_name"),
       db.from("wallet_transactions").select("id,profile_id,amount,transaction_type,description,match_id,created_at").order("created_at", { ascending: false }).limit(1000),
-      db.from("matches").select("id,match_date,venue,turf_cost,extra_cost,total_cost,notes,status,created_by,created_at,settled_at,match_attendance(profile_id,share_amount)").order("match_date", { ascending: false }).order("created_at", { ascending: false }).limit(200),
-      db.from("deposit_requests").select("id,profile_id,amount,method,reference,note,status,created_at,reviewed_by,reviewed_at,review_note").order("created_at", { ascending: false }).limit(300)
+      db.from("matches").select("id,match_date,venue,turf_cost,extra_cost,total_cost,notes,status,created_by,created_at,settled_at,voting_closed_at,match_attendance(profile_id,share_amount)").order("match_date", { ascending: false }).order("created_at", { ascending: false }).limit(200),
+      db.from("deposit_requests").select("id,profile_id,amount,method,reference,note,status,created_at,reviewed_by,reviewed_at,review_note").order("created_at", { ascending: false }).limit(300),
+      db.from("match_votes").select("match_id,profile_id,vote,updated_at"),
+      db.from("notifications").select("id,kind,title,body,match_id,read,created_at").order("created_at", { ascending: false }).limit(100)
     ]);
     for (const x of [m, t, ma, r]) if (x.error) throw x.error;
     members = m.data || []; transactions = t.data || []; matches = ma.data || []; requests = r.data || [];
+    votes = v.error ? [] : (v.data || []); notifications = n.error ? [] : (n.data || []);
+    if (v.error || n.error) console.warn("v3 tables missing? Run database/upgrade-v3.sql", v.error || n.error);
     renderAll();
   }
 
   // --------------------------------------------------------------- render
-  function renderAll() { renderHeader(); renderOverview(); renderMembers(); renderWallet(); renderDeposits(); renderMatches(); renderReports(); }
+  function renderAll() { renderHeader(); renderBell(); renderOverview(); renderMembers(); renderWallet(); renderDeposits(); renderMatches(); renderReports(); }
+  const activeMembers = () => members.filter(m => m.approved && m.active !== false);
+  function voteInfo(m) {
+    const vs = votes.filter(v => v.match_id === m.id);
+    const yes = vs.filter(v => v.vote === "yes").map(v => v.profile_id), no = vs.filter(v => v.vote === "no").map(v => v.profile_id);
+    const pending = activeMembers().map(x => x.id).filter(id => !yes.includes(id) && !no.includes(id));
+    const mine = vs.find(v => v.profile_id === profile.id)?.vote || null;
+    return { yes, no, pending, mine, est: yes.length ? Number(m.total_cost) / yes.length : null };
+  }
+  const myOpenVotes = () => matches.filter(m => m.status === "voting" && !voteInfo(m).mine);
+  function renderBell() {
+    const unread = notifications.filter(n => !n.read).length;
+    $("bellBadge").textContent = unread > 99 ? "99+" : unread; $("bellBadge").classList.toggle("hidden", !unread);
+    const icons = { vote: "🗳", match: "🏏", wallet: "₹", deposit: "↧", admin: "★", info: "•" };
+    $("notifList").innerHTML = notifications.length ? notifications.slice(0, 40).map(n => `<button class="notif ${n.read ? "" : "unread"}" data-notif="${n.id}" data-notif-match="${n.match_id || ""}" data-notif-kind="${esc(n.kind)}"><span class="notif-icon">${icons[n.kind] || "•"}</span><span><b>${esc(n.title)}</b><small>${esc(n.body || "")}</small><em>${dtFmt(n.created_at)}</em></span></button>`).join("") : '<div class="empty">No notifications yet.</div>';
+    $("enableAlertsBtn").classList.toggle("hidden", !("Notification" in window) || Notification.permission === "granted");
+  }
   function renderHeader() {
     $("topUserName").textContent = profile.full_name || user.email; $("topUserRole").textContent = isAdmin() ? "ADMIN" : "MEMBER";
     $("topAvatar").textContent = (profile.full_name || user.email || "P").trim()[0].toUpperCase();
@@ -89,6 +116,9 @@
     $("myMatches").textContent = matches.filter(m => (m.match_attendance || []).some(a => a.profile_id === profile.id)).length;
     $("mySpend").textContent = money(-transactions.filter(t => t.profile_id === profile.id && t.transaction_type === "match_deduction").reduce((a, t) => a + Number(t.amount), 0));
     $("myPendingDeposits").textContent = requests.filter(r => r.profile_id === profile.id && r.status === "pending").length;
+    const open = myOpenVotes(); $("myVotesNeeded").textContent = open.length;
+    $("votePanel").classList.toggle("hidden", !open.length);
+    $("voteList").innerHTML = open.map(m => { const vi = voteInfo(m); return `<div class="vote-item"><div><b>${esc(m.venue)}</b><small>${dateFmt(m.match_date)} · ${money(m.total_cost)} total · ${vi.yes.length} in so far${vi.est ? " · ~" + money(vi.est) + " each" : ""}</small></div><div class="btn-row"><button class="btn primary sm" data-vote="${m.id}" data-vote-value="yes">I'm in</button><button class="btn ghost sm" data-vote="${m.id}" data-vote-value="no">Can't make it</button></div></div>`; }).join("");
     if (isAdmin()) {
       $("clubBalance").textContent = money(members.filter(m => m.approved).reduce((a, m) => a + balanceFor(m.id), 0));
       const p = requests.filter(r => r.status === "pending");
@@ -99,7 +129,7 @@
     const list = matches.slice(0, 5);
     $("overviewMatches").innerHTML = list.length ? list.map(m => {
       const mine = (m.match_attendance || []).find(a => a.profile_id === profile.id);
-      return `<div class="mini-item"><div><b>${esc(m.venue)}</b><small>${dateFmt(m.match_date)} · ${(m.match_attendance || []).length} players · ${m.status === "settled" ? "settled" : "unsettled"}</small></div><strong>${mine ? money(mine.share_amount) + "<small> my share</small>" : money(m.total_cost)}</strong></div>`;
+      return `<div class="mini-item"><div><b>${esc(m.venue)}</b><small>${dateFmt(m.match_date)} · ${m.status === "voting" ? voteInfo(m).yes.length + " in · voting open" : (m.match_attendance || []).length + " players · " + (m.status === "settled" ? "settled" : "team locked")}</small></div><strong>${mine ? money(mine.share_amount) + "<small> my share</small>" : money(m.total_cost)}</strong></div>`;
     }).join("") : '<div class="empty">No matches recorded yet.</div>';
   }
   function renderMembers() {
@@ -163,12 +193,20 @@
     $("matchList").innerHTML = matches.length ? matches.map(m => {
       const att = m.match_attendance || []; const count = att.length;
       const mine = att.find(a => a.profile_id === profile.id);
+      if (m.status === "voting") {
+        const vi = voteInfo(m);
+        const chip = (id, cls) => `<span class="chip ${cls}">${esc(nameOf(id))}</span>`;
+        const lists = `<div class="vote-cols"><div><small class="muted">IN (${vi.yes.length})</small><div class="chips">${vi.yes.map(id => chip(id, "yes")).join("") || '<span class="muted">—</span>'}</div></div><div><small class="muted">OUT (${vi.no.length})</small><div class="chips">${vi.no.map(id => chip(id, "no")).join("") || '<span class="muted">—</span>'}</div></div><div><small class="muted">NOT VOTED (${vi.pending.length})</small><div class="chips">${vi.pending.map(id => chip(id, "pending")).join("") || '<span class="muted">—</span>'}</div></div></div>`;
+        const myBtns = `<div class="btn-row"><button class="btn ${vi.mine === "yes" ? "primary" : "ghost"} sm" data-vote="${m.id}" data-vote-value="yes">${vi.mine === "yes" ? "✓ I'm in" : "I'm in"}</button><button class="btn ${vi.mine === "no" ? "danger-fill" : "ghost"} sm" data-vote="${m.id}" data-vote-value="no">${vi.mine === "no" ? "✓ Can't make it" : "Can't make it"}</button></div>`;
+        const adminBtns = isAdmin() ? `<div class="btn-row"><button class="text-btn" data-edit-match="${m.id}">Edit</button><button class="text-btn" data-remind="${m.id}">Remind ${vi.pending.length}</button><button class="text-btn danger" data-delete-match="${m.id}">Delete</button><button class="btn primary sm" data-close-voting="${m.id}">Close voting →</button></div>` : "";
+        return `<article class="match-card voting"><div class="match-card-top"><span class="eyebrow">${dateFmt(m.match_date)}</span><span class="status voting">VOTING OPEN</span></div><h3>${esc(m.venue)}</h3><div class="match-meta">${vi.yes.length} in · ${vi.pending.length} yet to vote${m.notes ? " · " + esc(m.notes) : ""}</div><div class="match-cost">${money(m.total_cost)}<small class="muted"> total</small></div><div class="match-meta">${vi.est ? "~" + money(vi.est) + " per player if " + vi.yes.length + " play" : "Share depends on how many are in"}</div>${lists}<div class="match-foot vote-foot"><span>${vi.mine ? (vi.mine === "yes" ? "You're in ✓" : "You're out") : "<b>Your vote is needed</b>"}</span>${myBtns}</div>${adminBtns ? `<div class="match-admin">${adminBtns}</div>` : ""}</article>`;
+      }
       const names = att.map(a => nameOf(a.profile_id)).sort((a, b) => a.localeCompare(b));
       const chips = names.slice(0, 8).map(n => `<span class="chip">${esc(n)}</span>`).join("") + (names.length > 8 ? `<span class="chip more">+${names.length - 8} more</span>` : "");
       const adminBtns = isAdmin() && m.status !== "settled"
-        ? `<div class="btn-row"><button class="text-btn" data-edit-match="${m.id}">Edit</button><button class="text-btn danger" data-delete-match="${m.id}">Delete</button><button class="btn primary sm" data-settle="${m.id}">Settle →</button></div>`
+        ? `<div class="btn-row"><button class="text-btn" data-edit-match="${m.id}">Edit</button>${m.voting_closed_at ? `<button class="text-btn" data-reopen-voting="${m.id}">Reopen voting</button>` : ""}<button class="text-btn danger" data-delete-match="${m.id}">Delete</button><button class="btn primary sm" data-settle="${m.id}">Settle →</button></div>`
         : `<span>${m.status === "settled" ? "✓ Settled " + dtFmt(m.settled_at) : ""}</span>`;
-      return `<article class="match-card"><div class="match-card-top"><span class="eyebrow">${dateFmt(m.match_date)}</span><span class="status ${m.status === "settled" ? "settled" : "unsettled"}">${m.status.toUpperCase()}</span></div><h3>${esc(m.venue)}</h3><div class="match-meta">${count} player${count === 1 ? "" : "s"}${m.notes ? " · " + esc(m.notes) : ""}</div><div class="match-cost">${money(m.total_cost)}<small class="muted"> total</small></div><div class="match-meta">${count ? money(Number(m.total_cost) / count) + " per player" : "No attendance recorded"}${Number(m.extra_cost) > 0 ? ` · includes ${money(m.extra_cost)} extras` : ""}</div><div class="chips">${chips || '<span class="muted">No players selected</span>'}</div><div class="match-foot"><span>${mine ? `You attended · <b>${money(mine.share_amount)}</b>` : "You did not attend"}</span>${adminBtns}</div></article>`;
+      return `<article class="match-card"><div class="match-card-top"><span class="eyebrow">${dateFmt(m.match_date)}</span><span class="status ${m.status === "settled" ? "settled" : "unsettled"}">${m.status === "settled" ? "SETTLED" : "TEAM LOCKED"}</span></div><h3>${esc(m.venue)}</h3><div class="match-meta">${count} player${count === 1 ? "" : "s"}${m.voting_closed_at ? " · by vote" : ""}${m.notes ? " · " + esc(m.notes) : ""}</div><div class="match-cost">${money(m.total_cost)}<small class="muted"> total</small></div><div class="match-meta">${count ? money(Number(m.total_cost) / count) + " per player" : "No attendance recorded"}${Number(m.extra_cost) > 0 ? ` · includes ${money(m.extra_cost)} extras` : ""}</div><div class="chips">${chips || '<span class="muted">No players selected</span>'}</div><div class="match-foot"><span>${mine ? `You're playing · <b>${money(mine.share_amount)}</b>` : "You're not in this one"}</span>${adminBtns}</div></article>`;
     }).join("") : '<div class="empty">No matches yet. Admin can create the first match.</div>';
   }
   function renderReports() {
@@ -217,12 +255,17 @@
     $("selectedCount").textContent = `${n} selected`;
     $("shareHint").textContent = n && total ? `${money(total)} split ${n} ways = ${money(total / n)} per player. Absent players pay ₹0.` : "The total turf and additional costs are divided equally among selected players. Absent players pay ₹0.";
   }
+  function toggleVotingUi(on) { $("attendanceBlock").classList.toggle("hidden", on); $("votingHint").classList.toggle("hidden", !on); }
   function openMatchDialog(id) {
     const m = id ? matches.find(x => x.id === id) : null;
     const checked = new Set(m ? (m.match_attendance || []).map(a => a.profile_id) : attendeeCandidates(null).map(x => x.id));
     $("matchId").value = m?.id || ""; $("matchDate").value = m?.match_date || todayIso(); $("matchVenue").value = m?.venue || "";
     $("matchCost").value = m ? Number(m.turf_cost) : ""; $("extraCost").value = m ? Number(m.extra_cost) : 0; $("matchNotes").value = m?.notes || "";
     $("matchDialogTitle").textContent = m ? "Edit match" : "Create a turf match"; $("matchSubmit").textContent = m ? "Save changes" : "Create match";
+    const votingMatch = m?.status === "voting";
+    document.querySelectorAll("#matchDialog .add-only").forEach(el => el.classList.toggle("hidden", !!m));
+    $("matchVoting").checked = !m; toggleVotingUi(!m || votingMatch);
+    if (votingMatch) $("matchDialogTitle").textContent = "Edit match (voting open)";
     $("attendanceChoices").innerHTML = attendeeCandidates(m).map(x => `<label class="attendee"><input type="checkbox" value="${x.id}" ${checked.has(x.id) ? "checked" : ""}> ${esc(x.full_name)}${x.role === "admin" ? ' <small class="muted">(admin)</small>' : ""}</label>`).join("");
     updateShareHint(); $("matchDialog").showModal();
   }
@@ -274,16 +317,16 @@
       return;
     }
     db = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
-    $("configNote").textContent = "Secure sign-in powered by Supabase.";
-    let booted = false;
+    $("configNote").textContent = "Secure sign-in powered by Supabase. · v" + APP_VERSION;
+    let booted = false, pendingPw = null;
     const boot = async session => {
-      if (session?.user) { user = session.user; if (await getProfile()) { showApp(); await refreshAll(); go(currentPage); } }
-      else { user = null; profile = null; showAuth(); }
+      if (session?.user) { user = session.user; if (await getProfile()) { showApp(); await refreshAll(); go(currentPage); startRealtime(); if (pendingPw) { const f = pendingPw === "forced"; pendingPw = null; openSetPassword(f); } } }
+      else { user = null; profile = null; stopRealtime(); showAuth(); }
     };
     db.auth.onAuthStateChange((event, session) => {
       if (event === "INITIAL_SESSION" || event === "TOKEN_REFRESHED") return;
       if (event === "PASSWORD_RECOVERY" || (event === "SIGNED_IN" && (arrivedVia === "magiclink" || arrivedVia === "invite" || arrivedVia === "signup") && !localStorage.getItem("ft_pw_" + session?.user?.id))) {
-        history.replaceState(null, "", APP_URL); setTimeout(() => openSetPassword(event === "PASSWORD_RECOVERY"), 400);
+        history.replaceState(null, "", APP_URL); pendingPw = event === "PASSWORD_RECOVERY" ? "forced" : "offer";
       }
       booted = true; boot(session).catch(fail);
     });
@@ -291,6 +334,20 @@
     const { data: { session }, error } = await db.auth.getSession(); if (error) throw error;
     if (!booted) await boot(session);
   }
+  function scheduleRefresh() { clearTimeout(refreshTimer); refreshTimer = setTimeout(() => refreshAll().catch(console.error), 400); }
+  function startRealtime() {
+    stopRealtime(); if (!db.channel) return;
+    realtimeChannel = db.channel("finstack-live")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications", filter: `profile_id=eq.${profile.id}` }, payload => {
+        const n = payload.new; notifications.unshift(n); renderBell(); toast(`🔔 ${n.title}`);
+        if ("Notification" in window && Notification.permission === "granted") { try { new Notification(n.title, { body: n.body || "", icon: "icons/icon-192.png", tag: n.id }); } catch (_) {} }
+        scheduleRefresh();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "match_votes" }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "matches" }, scheduleRefresh)
+      .subscribe();
+  }
+  function stopRealtime() { if (realtimeChannel) { try { db.removeChannel(realtimeChannel); } catch (_) {} realtimeChannel = null; } }
   function openSetPassword(forced) {
     $("pwTitle").textContent = forced ? "Choose a new password" : "Welcome! Set a password";
     $("pwHint").textContent = forced ? "Enter the new password you want to use from now on." : "You're signed in via your email link. Set a password so you can also sign in with email + password next time (or skip and keep using email links).";
@@ -301,6 +358,7 @@
   // --------------------------------------------------------------- events
   document.addEventListener("click", async e => {
     if ($("sidebar").classList.contains("open") && !e.target.closest("#sidebar,#menuToggle")) $("sidebar").classList.remove("open");
+    if (!$("notifPanel").classList.contains("hidden") && !e.target.closest("#notifPanel,#bellBtn")) $("notifPanel").classList.add("hidden");
     const tab = e.target.closest("[data-auth-tab]"); if (tab) { const signup = tab.dataset.authTab === "signup"; document.querySelectorAll(".tab").forEach(x => x.classList.toggle("active", x === tab)); $("loginForm").classList.toggle("hidden", signup); $("signupForm").classList.toggle("hidden", !signup); }
     const nav = e.target.closest("[data-page]"); if (nav) go(nav.dataset.page);
     const goto = e.target.closest("[data-goto]"); if (goto) go(goto.dataset.goto);
@@ -314,6 +372,11 @@
       const editMatch = e.target.closest("[data-edit-match]"); if (editMatch) openMatchDialog(editMatch.dataset.editMatch);
       const delMatch = e.target.closest("[data-delete-match]"); if (delMatch) { const m = matches.find(x => x.id === delMatch.dataset.deleteMatch); if (m && await confirmDialog("Delete this match?", `${m.venue} on ${dateFmt(m.match_date)} (${money(m.total_cost)}) will be removed. No wallets are affected because it is unsettled.`, "Delete match")) await rpc("admin_delete_match", { p_match_id: m.id }, "Match deleted."); }
       const inv = e.target.closest("[data-invite]"); if (inv) { const m = members.find(x => x.id === inv.dataset.invite); if (m && await confirmDialog("Send email?", `Email a one-tap login link to ${m.full_name} at ${m.email}?`, "Send link")) { await sendInvite(m.email, m.full_name); toast(`Login link sent to ${m.email}.`); } }
+      const vote = e.target.closest("[data-vote]"); if (vote) { const r = await rpc("member_vote", { p_match_id: vote.dataset.vote, p_vote: vote.dataset.voteValue }); toast(r === "closed" ? "Vote recorded — everyone has voted, team sheet is locked." : (vote.dataset.voteValue === "yes" ? "You're in! 🏏" : "Noted — you're out for this one.")); }
+      const closeV = e.target.closest("[data-close-voting]"); if (closeV) { const m = matches.find(x => x.id === closeV.dataset.closeVoting); const vi = m ? voteInfo(m) : null; if (m && await confirmDialog("Close voting?", `${vi.yes.length} player${vi.yes.length === 1 ? "" : "s"} said they're in${vi.pending.length ? `, ${vi.pending.length} haven't voted` : ""}. The cost of ${money(m.total_cost)} will be split ${vi.yes.length ? "as " + money(Number(m.total_cost) / vi.yes.length) + " each" : "among those in"}. You can still edit attendance before settling.`, "Close voting")) await rpc("admin_close_voting", { p_match_id: m.id }, "Voting closed. Team sheet locked and players notified."); }
+      const reopen = e.target.closest("[data-reopen-voting]"); if (reopen && await confirmDialog("Reopen voting?", "Attendance will be unlocked and everyone is notified to confirm again. Existing votes are kept.", "Reopen voting")) await rpc("admin_reopen_voting", { p_match_id: reopen.dataset.reopenVoting }, "Voting reopened.");
+      const remind = e.target.closest("[data-remind]"); if (remind) { const n = await rpc("admin_remind_voters", { p_match_id: remind.dataset.remind }); toast(n ? `Reminder sent to ${n} member${n === 1 ? "" : "s"}.` : "Everyone has already voted."); }
+      const notif = e.target.closest("[data-notif]"); if (notif) { const n = notifications.find(x => x.id === notif.dataset.notif); if (n && !n.read) { n.read = true; renderBell(); db.rpc("mark_notifications_read", { p_ids: [n.id] }).then(() => {}, console.error); } $("notifPanel").classList.add("hidden"); go(n?.match_id ? "matches" : (n?.kind === "deposit" || n?.kind === "wallet") ? (n.kind === "deposit" ? "deposits" : "wallet") : "overview"); }
       const review = e.target.closest("[data-review]"); if (review) openReview(review.dataset.review);
       const cancelReq = e.target.closest("[data-cancel-request]"); if (cancelReq && await confirmDialog("Cancel request?", "Your deposit request will be withdrawn.", "Cancel request")) await rpc("member_cancel_deposit_request", { p_request_id: cancelReq.dataset.cancelRequest }, "Request cancelled.");
     } catch (err) { fail(err); }
@@ -326,6 +389,9 @@
     try {
       const { data, error } = await db.auth.signUp({ email: $("registerEmail").value.trim(), password: $("registerPassword").value, options: { data: { full_name: $("registerName").value.trim() } } });
       if (error) throw error;
+      if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+        throw new Error("An account with this email already exists (you were invited). Go to Sign in and use “Email me a login link” or “Forgot password?” to set your password.");
+      }
       toast(data.session ? "Account created." : "Check your email to confirm signup, then sign in.");
       document.querySelector('[data-auth-tab="login"]').click(); $("loginEmail").value = $("registerEmail").value.trim();
     } catch (err) { fail(err); } finally { busy(e.target, false); }
@@ -340,10 +406,18 @@
     const email = $("loginEmail").value.trim(); if (!email) return toast("Enter your email address first, then click “Email me a login link”.", true);
     try { const { error } = await db.auth.signInWithOtp({ email, options: { emailRedirectTo: APP_URL, shouldCreateUser: false } }); if (error) throw error; toast(`Login link sent to ${email}. Check your inbox (and spam).`); } catch (err) { fail(/Signups not allowed/i.test(err.message) ? new Error("This email is not registered. Ask the admin to add you first.") : err); }
   });
+  const pwError = msg => { $("pwError").textContent = msg || ""; $("pwError").classList.toggle("hidden", !msg); };
   $("pwForm").addEventListener("submit", async e => {
-    e.preventDefault(); const a = $("pwNew").value, b = $("pwNew2").value;
-    if (a.length < 8) return toast("Password must be at least 8 characters.", true); if (a !== b) return toast("Passwords do not match.", true);
-    busy(e.target, true); try { const { error } = await db.auth.updateUser({ password: a }); if (error) throw error; localStorage.setItem("ft_pw_" + user?.id, "1"); toast("Password saved. You can now sign in with email + password."); closeDialog("pwDialog"); } catch (err) { fail(err); } finally { busy(e.target, false); }
+    e.preventDefault(); const a = $("pwNew").value, b = $("pwNew2").value; pwError("");
+    if (a.length < 8) return pwError("Password must be at least 8 characters."); if (a !== b) return pwError("Passwords do not match.");
+    busy(e.target, true);
+    try {
+      const { data: { session } } = await db.auth.getSession();
+      if (!session) throw new Error("Your sign-in link has expired. Ask the admin for a new link, or use “Email me a login link” on the sign-in page.");
+      const { error } = await db.auth.updateUser({ password: a }); if (error) throw error;
+      try { localStorage.setItem("ft_pw_" + user?.id, "1"); } catch (_) {}
+      toast("Password saved. You can now sign in with email + password."); closeDialog("pwDialog");
+    } catch (err) { console.error(err); pwError(err.message || "Could not save the password. Please try again."); } finally { busy(e.target, false); }
   });
   $("pwSkip").addEventListener("click", () => { localStorage.setItem("ft_pw_" + user?.id, "1"); closeDialog("pwDialog"); });
   $("signOutBtn").addEventListener("click", async () => { const { error } = await db.auth.signOut(); if (error) fail(error); });
@@ -377,11 +451,14 @@
   $("matchForm").addEventListener("submit", async e => {
     e.preventDefault(); busy(e.target, true);
     try {
-      const ids = [...$("attendanceChoices").querySelectorAll("input:checked")].map(x => x.value);
-      if (!ids.length) throw new Error("Select at least one attending player.");
-      const args = { p_match_date: $("matchDate").value, p_venue: $("matchVenue").value.trim(), p_turf_cost: Number($("matchCost").value), p_extra_cost: Number($("extraCost").value || 0), p_notes: $("matchNotes").value.trim(), p_attendee_ids: ids };
       const id = $("matchId").value;
-      if (id) await rpc("admin_update_match", { p_match_id: id, ...args }, "Match updated."); else await rpc("admin_create_match", args, "Match created. Review it and settle when ready.");
+      const editing = id ? matches.find(x => x.id === id) : null;
+      const voting = editing ? editing.status === "voting" : $("matchVoting").checked;
+      const ids = voting ? [] : [...$("attendanceChoices").querySelectorAll("input:checked")].map(x => x.value);
+      if (!voting && !ids.length) throw new Error("Select at least one attending player.");
+      const args = { p_match_date: $("matchDate").value, p_venue: $("matchVenue").value.trim(), p_turf_cost: Number($("matchCost").value), p_extra_cost: Number($("extraCost").value || 0), p_notes: $("matchNotes").value.trim(), p_attendee_ids: ids };
+      if (id) await rpc("admin_update_match", { p_match_id: id, ...args }, "Match updated.");
+      else await rpc("admin_create_match", { ...args, p_open_voting: voting }, voting ? "Match proposed. Every member has been notified to vote." : "Match created. Review it and settle when ready.");
       closeDialog("matchDialog");
     } catch (err) { fail(err); } finally { busy(e.target, false); }
   });
@@ -390,5 +467,12 @@
   $("rejectBtn").addEventListener("click", async () => { try { await rpc("admin_review_deposit", { p_request_id: $("reviewId").value, p_approve: false, p_note: $("reviewNote").value.trim() }, "Request rejected."); closeDialog("reviewDialog"); } catch (err) { fail(err); } });
   $("exportCsv").addEventListener("click", exportSummaryCsv); $("exportLedgerCsv").addEventListener("click", exportLedgerCsv);
   $("menuToggle").addEventListener("click", () => $("sidebar").classList.toggle("open"));
+  $("bellBtn").addEventListener("click", () => $("notifPanel").classList.toggle("hidden"));
+  $("markAllRead").addEventListener("click", async () => { notifications.forEach(n => n.read = true); renderBell(); try { const { error } = await db.rpc("mark_notifications_read", { p_ids: null }); if (error) throw error; } catch (err) { fail(err); } });
+  $("enableAlertsBtn").addEventListener("click", async () => { try { const r = await Notification.requestPermission(); toast(r === "granted" ? "Alerts enabled for this device while the app is open." : "Alerts not enabled.", r !== "granted"); renderBell(); } catch (err) { fail(err); } });
+  $("matchVoting").addEventListener("change", () => toggleVotingUi($("matchVoting").checked));
+  window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installPrompt = e; $("installBtn").classList.remove("hidden"); });
+  $("installBtn").addEventListener("click", async () => { if (!installPrompt) return; installPrompt.prompt(); await installPrompt.userChoice; installPrompt = null; $("installBtn").classList.add("hidden"); });
+  if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(console.warn);
   init().catch(fail);
 })();

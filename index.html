@@ -4,11 +4,17 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#090e18">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Finstack Turf">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
   <title>Finstack Turf — Kiddy Bank</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=3.0">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -71,6 +77,7 @@
       </nav>
       <div class="sidebar-bottom">
         <div class="help-card"><span class="help-icon">✦</span><b>Keep it fair.</b><p>Every match settlement is recorded in the wallet ledger.</p></div>
+        <button id="installBtn" class="nav-link install hidden"><span>⤓</span> Install app</button>
         <button id="signOutBtn" class="nav-link signout"><span>↪</span> Sign out</button>
       </div>
     </aside>
@@ -78,6 +85,10 @@
       <header class="topbar">
         <button id="menuToggle" class="icon-btn mobile-only" aria-label="Open menu">☰</button>
         <div><div class="eyebrow" id="pageEyebrow">TEAM CONTROL CENTER</div><h1 id="pageTitle">Overview</h1></div>
+        <div class="top-actions">
+          <button id="bellBtn" class="icon-btn bell" aria-label="Notifications">🔔<em id="bellBadge" class="bell-badge hidden">0</em></button>
+          <div id="notifPanel" class="notif-panel hidden"><div class="notif-head"><b>Notifications</b><div class="btn-row"><button class="text-btn" id="enableAlertsBtn">Enable alerts</button><button class="text-btn" id="markAllRead">Mark all read</button></div></div><div id="notifList" class="notif-list"><div class="empty">No notifications yet.</div></div></div>
+        </div>
         <div class="top-user"><div class="top-user-copy"><b id="topUserName">Player</b><span id="topUserRole">MEMBER</span></div><div class="avatar" id="topAvatar">P</div></div>
       </header>
 
@@ -90,8 +101,10 @@
           <article class="metric-card admin-only"><div class="metric-top"><span>CLUB WALLET TOTAL</span><span class="metric-icon">₹</span></div><strong id="clubBalance">₹0.00</strong><small>Combined member balances</small></article>
           <article class="metric-card admin-only"><div class="metric-top"><span>PENDING DEPOSITS</span><span class="metric-icon">↧</span></div><strong id="pendingDeposits">0</strong><small id="pendingDepositsHint">Requests waiting for your review</small></article>
           <article class="metric-card member-only"><div class="metric-top"><span>MY SPEND</span><span class="metric-icon">₹</span></div><strong id="mySpend">₹0.00</strong><small>Total charged for matches</small></article>
-          <article class="metric-card member-only"><div class="metric-top"><span>MY REQUESTS</span><span class="metric-icon">↧</span></div><strong id="myPendingDeposits">0</strong><small>Deposit requests pending approval</small></article>
+          <article class="metric-card member-only"><div class="metric-top"><span>VOTES NEEDED</span><span class="metric-icon">🗳</span></div><strong id="myVotesNeeded">0</strong><small>Matches waiting for your answer</small></article>
+          <span id="myPendingDeposits" class="hidden"></span>
         </div>
+        <article class="panel vote-panel hidden" id="votePanel"><div class="panel-head"><div><span class="eyebrow">ARE YOU IN?</span><h3>Matches waiting for your vote</h3></div><button class="text-btn" data-goto="matches">All matches →</button></div><div id="voteList" class="vote-list"></div></article>
         <div class="content-grid">
           <article class="panel"><div class="panel-head"><div><span class="eyebrow">LATEST ACTIVITY</span><h3>Recent wallet activity</h3></div><button class="text-btn" data-goto="wallet">View ledger →</button></div><div id="overviewTransactions" class="table-wrap"><div class="empty">No transactions yet.</div></div></article>
           <article class="panel"><div class="panel-head"><div><span class="eyebrow">RECENT GAMES</span><h3>Recent matches</h3></div><button class="text-btn" data-goto="matches">All matches →</button></div><div id="overviewMatches" class="mini-list"><div class="empty">No matches recorded yet.</div></div></article>
@@ -155,17 +168,17 @@
 
   <dialog id="adjustDialog" class="modal"><form id="adjustForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">ADMIN ACTION</span><h3 id="adjustTitle">Wallet adjustment</h3></div><button class="icon-btn" type="button" data-close="adjustDialog">×</button></div><input type="hidden" id="adjustMemberId"><label>Adjustment type<select id="adjustType"><option value="deposit">Deposit / top-up</option><option value="credit">Refund / credit</option><option value="debit">Manual deduction</option></select></label><label>Amount (₹)<input id="adjustAmount" type="number" min="0.01" step="0.01" required></label><label>Reason<input id="adjustReason" maxlength="160" required placeholder="UPI received / correction"></label><div class="modal-actions"><button type="button" class="btn ghost" data-close="adjustDialog">Cancel</button><button class="btn primary" type="submit">Save adjustment</button></div></form></dialog>
 
-  <dialog id="matchDialog" class="modal wide"><form id="matchForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">MATCH SETUP</span><h3 id="matchDialogTitle">Create a turf match</h3></div><button class="icon-btn" type="button" data-close="matchDialog">×</button></div><input type="hidden" id="matchId"><div class="form-grid"><label>Match date<input id="matchDate" type="date" required></label><label>Turf / venue<input id="matchVenue" maxlength="120" placeholder="Finstack Turf" required></label><label>Booking cost (₹)<input id="matchCost" type="number" min="0.01" step="0.01" required placeholder="1200"></label><label>Additional expenses (₹)<input id="extraCost" type="number" min="0" step="0.01" value="0"></label></div><label>Notes<input id="matchNotes" maxlength="250" placeholder="Optional notes"></label><div class="attendance-head"><b>Select players who attended</b><span><button type="button" class="text-btn" id="selectAll">All</button> · <button type="button" class="text-btn" id="selectNone">None</button> · <span id="selectedCount">0 selected</span></span></div><div id="attendanceChoices" class="attendance-grid"></div><p class="hint" id="shareHint">The total turf and additional costs are divided equally among selected players. Absent players pay ₹0.</p><div class="modal-actions"><button type="button" class="btn ghost" data-close="matchDialog">Cancel</button><button class="btn primary" type="submit" id="matchSubmit">Create match</button></div></form></dialog>
+  <dialog id="matchDialog" class="modal wide"><form id="matchForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">MATCH SETUP</span><h3 id="matchDialogTitle">Create a turf match</h3></div><button class="icon-btn" type="button" data-close="matchDialog">×</button></div><input type="hidden" id="matchId"><div class="form-grid"><label>Match date<input id="matchDate" type="date" required></label><label>Turf / venue<input id="matchVenue" maxlength="120" placeholder="Finstack Turf" required></label><label>Booking cost (₹)<input id="matchCost" type="number" min="0.01" step="0.01" required placeholder="1200"></label><label>Additional expenses (₹)<input id="extraCost" type="number" min="0" step="0.01" value="0"></label></div><label>Notes<input id="matchNotes" maxlength="250" placeholder="Optional notes"></label><label class="inline-check vote-toggle add-only"><input type="checkbox" id="matchVoting" checked> Open for voting — notify every member and let them confirm if they are in</label><div id="attendanceBlock"><div class="attendance-head"><b>Select players who attended</b><span><button type="button" class="text-btn" id="selectAll">All</button> · <button type="button" class="text-btn" id="selectNone">None</button> · <span id="selectedCount">0 selected</span></span></div><div id="attendanceChoices" class="attendance-grid"></div><p class="hint" id="shareHint">The total turf and additional costs are divided equally among selected players. Absent players pay ₹0.</p></div><p class="hint hidden" id="votingHint">Everyone gets a notification and votes “I'm in” or “Can't make it”. When all have voted (or you close voting) the cost is split equally among those who are in.</p><div class="modal-actions"><button type="button" class="btn ghost" data-close="matchDialog">Cancel</button><button class="btn primary" type="submit" id="matchSubmit">Create match</button></div></form></dialog>
 
   <dialog id="settleDialog" class="modal"><form id="settleForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">FINAL CHECK</span><h3>Settle this match?</h3></div><button class="icon-btn" type="button" data-close="settleDialog">×</button></div><p id="settleSummary" class="muted"></p><div id="settleShares" class="table-wrap"></div><p class="hint">This deducts each attendee's share atomically. A match can only be settled once and cannot be edited afterwards.</p><input type="hidden" id="settleMatchId"><div class="modal-actions"><button type="button" class="btn ghost" data-close="settleDialog">Cancel</button><button class="btn primary" type="submit">Confirm settlement</button></div></form></dialog>
 
   <dialog id="reviewDialog" class="modal"><form id="reviewForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">DEPOSIT REQUEST</span><h3>Review request</h3></div><button class="icon-btn" type="button" data-close="reviewDialog">×</button></div><div id="reviewSummary" class="review-box"></div><input type="hidden" id="reviewId"><label>Note to member (optional)<input id="reviewNote" maxlength="160" placeholder="e.g. Received in bank app"></label><div class="modal-actions"><button type="button" class="btn ghost danger" id="rejectBtn">Reject</button><button class="btn primary" type="submit">Approve & credit wallet</button></div></form></dialog>
 
-  <dialog id="pwDialog" class="modal"><form id="pwForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">YOUR ACCOUNT</span><h3 id="pwTitle">Set a password</h3></div></div><p class="muted" id="pwHint"></p><label>New password<input id="pwNew" type="password" minlength="8" autocomplete="new-password" required placeholder="At least 8 characters"></label><label>Confirm password<input id="pwNew2" type="password" minlength="8" autocomplete="new-password" required placeholder="Type it again"></label><div class="modal-actions"><button type="button" class="btn ghost" id="pwSkip">Skip for now</button><button class="btn primary" type="submit">Save password</button></div></form></dialog>
+  <dialog id="pwDialog" class="modal"><form id="pwForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">YOUR ACCOUNT</span><h3 id="pwTitle">Set a password</h3></div></div><p class="muted" id="pwHint"></p><p id="pwError" class="form-error hidden"></p><label>New password<input id="pwNew" type="password" minlength="8" autocomplete="new-password" required placeholder="At least 8 characters"></label><label>Confirm password<input id="pwNew2" type="password" minlength="8" autocomplete="new-password" required placeholder="Type it again"></label><div class="modal-actions"><button type="button" class="btn ghost" id="pwSkip">Skip for now</button><button class="btn primary" type="submit">Save password</button></div></form></dialog>
 
   <dialog id="confirmDialog" class="modal"><form id="confirmForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">PLEASE CONFIRM</span><h3 id="confirmTitle">Are you sure?</h3></div><button class="icon-btn" type="button" data-close="confirmDialog">×</button></div><p id="confirmText" class="muted"></p><div class="modal-actions"><button type="button" class="btn ghost" data-close="confirmDialog">Cancel</button><button class="btn primary danger-fill" type="submit" id="confirmOk">Yes, continue</button></div></form></dialog>
 
-  <script src="js/config.js"></script>
-  <script src="js/app.js"></script>
+  <script src="js/config.js?v=3.0"></script>
+  <script src="js/app.js?v=3.0"></script>
 </body>
 </html>

@@ -1,12 +1,12 @@
-# Finstack Turf — Kiddy Bank (v2)
+# Finstack Turf — Kiddy Bank (v3)
 
 A private club app for the weekly cricket crew: members, a shared "Kiddy Bank" wallet per player,
 deposit requests, match attendance, automatic cost splitting, one-click settlement and reports.
 
 | Who | Can do |
 |-----|--------|
-| **Admin** | Add members directly (no signup needed), approve self-signups, edit/deactivate members, record deposits, approve/reject members' deposit requests, create / edit / delete / settle matches, view club ledger and reports, export CSV. |
-| **Member** | Sign in, see own wallet and ledger, submit "I have paid ₹X via UPI/cash" deposit requests, see all matches, their own share and attendance. |
+| **Admin** | Add members directly (no signup needed), approve self-signups, edit/deactivate members, record deposits, approve/reject members' deposit requests, propose matches for voting or create them directly, close/reopen voting, remind non-voters, edit / delete / settle matches, view club ledger and reports, export CSV. |
+| **Member** | Install the app on their phone, get notified when a match is proposed, vote *I'm in* / *Can't make it*, see who is in, their share, own wallet and ledger, submit deposit requests. |
 
 **Stack:** plain HTML/CSS/JS (no build step) on **GitHub Pages**, with **Supabase** for login and the Postgres database. Free tier is enough for a club of 24.
 
@@ -17,7 +17,9 @@ finstack-turf/
 ├── js/config.js        # ← paste your Supabase URL + anon key here
 ├── js/app.js
 ├── database/schema.sql # ← run once in Supabase SQL Editor
+├── database/upgrade-v3.sql  # ← run this on a project created with v2
 ├── email-templates/magic-link.html  # ← paste into Supabase email templates
+├── manifest.json, sw.js, icons/     # installable app (PWA)
 └── README.md
 ```
 
@@ -101,6 +103,26 @@ Members who stop playing: **Edit → Status = Inactive**. They keep their histor
 
 Example: five players have ₹500 each. Four attend a ₹1,200 match → each attendee is charged ₹300; balances become ₹200 ×4 and ₹500 for the absent player.
 
+## 6a. Match voting (v3)
+
+1. Admin → **Matches → ＋ New match**, keep **"Open for voting"** ticked, enter date, venue and expected cost, save.
+2. Every active member gets a notification (bell icon, live pop-up if the app is open, and a "Matches waiting for your vote" box on their Overview). They tap **I'm in** or **Can't make it**; they can change their mind while voting is open.
+3. The match card shows IN / OUT / NOT VOTED lists and the estimated share. Admin can **Remind** everyone who hasn't voted.
+4. When **everyone has voted**, voting closes automatically; the cost is split equally among the "in" players and the team sheet is locked (status TEAM LOCKED). Admin can also **Close voting** early, or **Reopen voting** if needed. Attendance can still be edited before settlement.
+5. After the game, admin clicks **Settle** as before. Players are notified of their deduction.
+
+Untick "Open for voting" to create a match the old way (admin picks the attendees).
+
+## 6b. Notifications
+
+The bell at the top shows unread notifications: new match to vote on, reminders, team sheet locked (with your share), match settled, deposit approved/rejected, and — for admins — new deposit requests and voting closed. They update live while the app is open. Click **Enable alerts** in the bell panel to also get a system pop-up while the app is open. (Push alerts while the app is fully closed are not part of this version.)
+
+## 6c. Install on phones (app icon)
+
+The site is a Progressive Web App. On Android, open the site in Chrome, tap the ⋮ menu → **Install app** (or **Add to Home screen**); the sidebar also shows an **Install app** button when the browser offers it. On iPhone, open it in Safari → Share → **Add to Home Screen**. It then launches full-screen with the Finstack Turf icon, and everyone uses the same live data.
+
+If you want an actual `.apk` to share, go to https://www.pwabuilder.com, enter your site URL, click **Package for stores → Android**, and download the generated APK (a "signed test APK" is fine for sharing within the club; a Play Store listing needs a developer account).
+
 ## 7. Reports
 
 Admins get a per-player summary (deposits, match charges, other debits, balance, matches attended) and two CSV exports: the summary and the full ledger. Members see their own ledger under **Kiddy Bank**.
@@ -121,6 +143,8 @@ Admins get a per-player summary (deposits, match charges, other debits, balance,
 - **"Email signups are disabled"** → Authentication → Sign In / Providers → Email → *Enable email provider* on; Authentication → Settings → *Allow new users to sign up* on.
 - **"Email not confirmed"** → Authentication → Sign In / Providers → Email → turn *Confirm email* off; confirm the stuck account with `update auth.users set email_confirmed_at = now() where email = '…';` in the SQL Editor.
 - **Invite link opens a broken page / "otp expired"** → the link is single-use and expires in 1 hour; send a fresh one with *Resend invite*. Also check `APP_URL` in `js/config.js` and Supabase Redirect URLs match the deployed address.
+- **Voting / bell does nothing, console says table missing** → run `database/upgrade-v3.sql` in the SQL Editor (safe to re-run).
+- **Notifications don't appear live** → in Supabase → Database → Publications, make sure `supabase_realtime` includes `notifications`, `match_votes` and `matches` (upgrade-v3.sql adds them).
 - **"email rate limit exceeded"** → custom SMTP is not set up yet (section 5a) or the hourly limit under Rate Limits is too low.
 - **Confirmation / reset emails never arrive** → either turn off *Confirm email* in Supabase, or configure SMTP; also check Redirect URLs match the deployed address exactly.
 - **Settle fails with "Insufficient wallet balance: …"** → top up those players or remove them from attendance, then settle again.
@@ -128,5 +152,6 @@ Admins get a per-player summary (deposits, match charges, other debits, balance,
 ## 10. Ideas for later
 
 - Charge absentees or set custom shares per match.
-- Push/WhatsApp reminders when balance drops below ₹300.
+- True push notifications when the app is closed (needs a small server/Edge Function with Web Push).
+- Low-balance reminders.
 - PWA install / offline shell.
