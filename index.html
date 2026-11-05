@@ -2,52 +2,64 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#090e18">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#070b14">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Finstack Turf">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <title>Finstack Turf — Kiddy Bank</title>
+  <title>Finstack Turf — Stadium</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=3.2">
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css?v=4.0">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="logo" viewBox="0 0 64 64">
+      <circle cx="32" cy="32" r="30" fill="#0e1f16" stroke="#b8f36b" stroke-width="2.5"/>
+      <circle cx="32" cy="32" r="24" fill="none" stroke="#2a5c3a" stroke-width="1" stroke-dasharray="3 4"/>
+      <rect x="22" y="20" width="3.2" height="24" rx="1.4" fill="#f4e4c1"/><rect x="30.4" y="20" width="3.2" height="24" rx="1.4" fill="#f4e4c1"/><rect x="38.8" y="20" width="3.2" height="24" rx="1.4" fill="#f4e4c1"/>
+      <rect x="21" y="17.5" width="8.5" height="2.6" rx="1.3" fill="#ffd166"/><rect x="34.5" y="17.5" width="8.5" height="2.6" rx="1.3" fill="#ffd166"/>
+      <circle cx="45" cy="42" r="7" fill="#e63946" stroke="#ffb3b3" stroke-width="1"/>
+      <path d="M40.5 38.5 Q45 42 40.5 45.5 M49.5 38.5 Q45 42 49.5 45.5" stroke="#fff" stroke-width="1" fill="none" opacity=".8"/>
+    </symbol>
+  </svg>
   <div id="toast" class="toast" role="status"></div>
 
-  <!-- ============================ AUTH ============================ -->
-  <section id="authView" class="auth-shell">
+  <!-- ============================ GATE (AUTH) ============================ -->
+  <section id="authView" class="auth-shell stadium-bg">
+    <div class="floodlight fl-left"></div><div class="floodlight fl-right"></div>
     <div class="auth-art">
-      <div class="brand"><span class="brand-mark">F</span><span>FINSTACK <b>TURF</b></span></div>
+      <div class="brand"><svg class="brand-logo"><use href="#logo"/></svg><span>FINSTACK <b>TURF</b><small>STADIUM</small></span></div>
       <div class="auth-copy">
-        <span class="eyebrow">YOUR GAME. YOUR CREW. YOUR BANK.</span>
-        <h1>Play together.<br><em>Settle smarter.</em></h1>
-        <p>One place for match costs, player attendance and every rupee in your Kiddy Bank.</p>
-        <div class="auth-stats"><div><b>24</b><span>TEAM MEMBERS</span></div><div><b>₹500</b><span>STANDARD TOP-UP</span></div><div><b>100%</b><span>TRANSPARENT</span></div></div>
+        <span class="eyebrow">GATE 1 · MEMBERS ENTRANCE</span>
+        <h1>Walk in.<br><em>Play. Settle.</em></h1>
+        <p>Fixtures, line-ups, live scores and every rupee in the Kiddy Bank — one stadium for the whole crew.</p>
+        <div class="auth-stats"><div><b>🏏</b><span>WEEKLY FIXTURES</span></div><div><b>₹</b><span>FAIR SPLITS</span></div><div><b>LIVE</b><span>SCOREBOARD</span></div></div>
       </div>
-      <div class="pitch-lines"></div>
+      <div class="pitch-art" aria-hidden="true"></div>
     </div>
     <div class="auth-panel">
-      <div class="auth-mobile-brand brand"><span class="brand-mark">F</span><span>FINSTACK <b>TURF</b></span></div>
-      <div class="auth-card">
+      <div class="auth-mobile-brand brand"><svg class="brand-logo"><use href="#logo"/></svg><span>FINSTACK <b>TURF</b></span></div>
+      <div class="auth-card ticket">
+        <div class="ticket-head"><span>MATCH TICKET</span><span>ADMIT ONE</span></div>
         <div class="tabs"><button class="tab active" data-auth-tab="login">Sign in</button><button class="tab" data-auth-tab="signup">Create account</button></div>
         <div id="loginForm">
-          <span class="eyebrow">WELCOME BACK</span><h2>Get in the game.</h2>
-          <p class="muted">Sign in to view your wallet and matches.</p>
+          <span class="eyebrow">WELCOME BACK</span><h2>Show your pass.</h2>
+          <p class="muted">Sign in to enter the stadium.</p>
           <form id="signInForm">
             <label>Email address<input type="email" id="loginEmail" autocomplete="email" required placeholder="you@example.com"></label>
             <label>Password<input type="password" id="loginPassword" autocomplete="current-password" required placeholder="Your password"></label>
-            <button class="btn primary full" type="submit">Sign in <span>→</span></button>
+            <button class="btn primary full" type="submit">Enter stadium <span>→</span></button>
           </form>
           <div class="auth-links"><button class="text-btn auth-link" id="magicBtn" type="button">✉ Email me a login link</button><button class="text-btn auth-link" id="forgotBtn" type="button">Forgot password?</button></div>
         </div>
         <div id="signupForm" class="hidden">
-          <span class="eyebrow">JOIN THE SQUAD</span><h2>Create your account.</h2>
+          <span class="eyebrow">JOIN THE SQUAD</span><h2>Create your pass.</h2>
           <p class="muted">Use the same email the admin added you with and you'll be approved automatically.</p>
           <form id="registerForm">
             <label>Full name<input id="registerName" required maxlength="80" placeholder="Your name"></label>
@@ -62,29 +74,31 @@
     </div>
   </section>
 
-  <!-- ============================ APP ============================ -->
+  <!-- ============================ STADIUM (APP) ============================ -->
   <div id="appView" class="app hidden">
     <aside class="sidebar" id="sidebar">
-      <div class="brand"><span class="brand-mark">F</span><span>FINSTACK <b>TURF</b></span></div>
+      <div class="brand"><svg class="brand-logo"><use href="#logo"/></svg><span>FINSTACK <b>TURF</b><small>STADIUM MAP</small></span></div>
       <div class="club-chip"><span class="live-dot"></span> PRIVATE TEAM SPACE</div>
       <nav class="nav">
-        <button class="nav-link active" data-page="overview"><span>◫</span> Overview</button>
-        <button class="nav-link admin-only" data-page="members"><span>♙</span> Members</button>
+        <button class="nav-link active" data-page="overview"><span>🏟️</span> Pavilion</button>
+        <button class="nav-link" data-page="matches"><span>📅</span> Fixtures <em id="navVoteBadge" class="nav-badge hidden">0</em></button>
+        <button class="nav-link" data-page="live"><span>🔴</span> Live scoreboard <em id="navLiveBadge" class="nav-badge live hidden">LIVE</em></button>
+        <button class="nav-link" data-page="chat"><span>💬</span> Dressing room <em id="navChatBadge" class="nav-badge hidden">0</em></button>
+        <button class="nav-link admin-only" data-page="members"><span>👥</span> Squad</button>
         <button class="nav-link" data-page="wallet"><span>◈</span> Kiddy Bank</button>
         <button class="nav-link" data-page="deposits"><span>↧</span> Deposits <em id="navDepositBadge" class="nav-badge hidden">0</em></button>
-        <button class="nav-link" data-page="matches"><span>🏏</span> Matches</button>
         <button class="nav-link admin-only" data-page="reports"><span>▥</span> Reports</button>
       </nav>
       <div class="sidebar-bottom">
-        <div class="help-card"><span class="help-icon">✦</span><b>Keep it fair.</b><p>Every match settlement is recorded in the wallet ledger.</p></div>
+        <div class="help-card"><span class="help-icon">✦</span><b>Play fair. Split fair.</b><p>Every settlement is recorded in the Kiddy Bank ledger.</p></div>
         <button id="installBtn" class="nav-link install hidden"><span>⤓</span> Install app</button>
-        <button id="signOutBtn" class="nav-link signout"><span>↪</span> Sign out</button>
+        <button id="signOutBtn" class="nav-link signout"><span>↪</span> Leave stadium</button>
       </div>
     </aside>
     <main class="main">
       <header class="topbar">
         <button id="menuToggle" class="icon-btn mobile-only" aria-label="Open menu">☰</button>
-        <div><div class="eyebrow" id="pageEyebrow">TEAM CONTROL CENTER</div><h1 id="pageTitle">Overview</h1></div>
+        <div><div class="eyebrow" id="pageEyebrow">PAVILION</div><h1 id="pageTitle">Overview</h1></div>
         <div class="top-actions">
           <button id="bellBtn" class="icon-btn bell" aria-label="Notifications">🔔<em id="bellBadge" class="bell-badge hidden">0</em></button>
           <div id="notifPanel" class="notif-panel hidden"><div class="notif-head"><b>Notifications</b><div class="btn-row"><button class="text-btn" id="enableAlertsBtn">Enable push alerts</button><span class="muted hidden" id="alertsOn">✓ Push alerts on</span><button class="text-btn" id="markAllRead">Mark all read</button></div></div><div id="notifList" class="notif-list"><div class="empty">No notifications yet.</div></div></div>
@@ -92,33 +106,35 @@
         <div class="top-user"><div class="top-user-copy"><b id="topUserName">Player</b><span id="topUserRole">MEMBER</span></div><div class="avatar" id="topAvatar">P</div></div>
       </header>
 
-      <!-- Overview -->
+      <!-- Pavilion / Overview -->
       <section id="page-overview" class="page active">
-        <div class="welcome-row"><div><span class="eyebrow">THE CREW IS READY</span><h2>Good game starts <em>here.</em></h2><p class="muted">Your club finances, at a glance.</p></div><div class="date-pill" id="todayLabel"></div></div>
+        <div id="liveStrip" class="live-strip hidden"></div>
+        <div class="welcome-row"><div><span class="eyebrow">THE CREW IS READY</span><h2>Good game starts <em>here.</em></h2><p class="muted">Fixtures, votes and your Kiddy Bank at a glance.</p></div><div class="date-pill" id="todayLabel"></div></div>
+        <article class="panel next-fixture hidden" id="nextFixture"></article>
         <div class="metric-grid">
           <article class="metric-card accent"><div class="metric-top"><span>MY WALLET</span><span class="metric-icon">◈</span></div><strong id="myBalance">₹0.00</strong><small>Available Kiddy Bank balance</small></article>
-          <article class="metric-card"><div class="metric-top"><span>MY MATCHES</span><span class="metric-icon">🏏</span></div><strong id="myMatches">0</strong><small>Matches attended</small></article>
+          <article class="metric-card"><div class="metric-top"><span>MY MATCHES</span><span class="metric-icon">🏏</span></div><strong id="myMatches">0</strong><small>Matches on the team sheet</small></article>
           <article class="metric-card admin-only"><div class="metric-top"><span>CLUB WALLET TOTAL</span><span class="metric-icon">₹</span></div><strong id="clubBalance">₹0.00</strong><small>Combined member balances</small></article>
           <article class="metric-card admin-only"><div class="metric-top"><span>PENDING DEPOSITS</span><span class="metric-icon">↧</span></div><strong id="pendingDeposits">0</strong><small id="pendingDepositsHint">Requests waiting for your review</small></article>
           <article class="metric-card member-only"><div class="metric-top"><span>MY SPEND</span><span class="metric-icon">₹</span></div><strong id="mySpend">₹0.00</strong><small>Total charged for matches</small></article>
           <article class="metric-card member-only"><div class="metric-top"><span>VOTES NEEDED</span><span class="metric-icon">🗳</span></div><strong id="myVotesNeeded">0</strong><small>Matches waiting for your answer</small></article>
           <span id="myPendingDeposits" class="hidden"></span>
         </div>
-        <article class="panel vote-panel hidden" id="votePanel"><div class="panel-head"><div><span class="eyebrow">ARE YOU IN?</span><h3>Matches waiting for your vote</h3></div><button class="text-btn" data-goto="matches">All matches →</button></div><div id="voteList" class="vote-list"></div></article>
+        <article class="panel vote-panel hidden" id="votePanel"><div class="panel-head"><div><span class="eyebrow">ARE YOU IN?</span><h3>Matches waiting for your vote</h3></div><button class="text-btn" data-goto="matches">All fixtures →</button></div><div id="voteList" class="vote-list"></div></article>
         <div class="content-grid">
           <article class="panel"><div class="panel-head"><div><span class="eyebrow">LATEST ACTIVITY</span><h3>Recent wallet activity</h3></div><button class="text-btn" data-goto="wallet">View ledger →</button></div><div id="overviewTransactions" class="table-wrap"><div class="empty">No transactions yet.</div></div></article>
-          <article class="panel"><div class="panel-head"><div><span class="eyebrow">RECENT GAMES</span><h3>Recent matches</h3></div><button class="text-btn" data-goto="matches">All matches →</button></div><div id="overviewMatches" class="mini-list"><div class="empty">No matches recorded yet.</div></div></article>
+          <article class="panel"><div class="panel-head"><div><span class="eyebrow">RECENT GAMES</span><h3>Results & fixtures</h3></div><button class="text-btn" data-goto="matches">All matches →</button></div><div id="overviewMatches" class="mini-list"><div class="empty">No matches recorded yet.</div></div></article>
         </div>
       </section>
 
-      <!-- Members (admin) -->
+      <!-- Squad / Members (admin) -->
       <section id="page-members" class="page">
         <div class="section-intro"><div><span class="eyebrow">THE SQUAD</span><h2>Member management</h2><p class="muted">Add players directly, approve signups and keep wallets topped up.</p></div><div class="btn-row"><button class="btn ghost" id="recordDepositBtn">₹ Record deposit</button><button class="btn primary" id="addMemberBtn">＋ Add member</button></div></div>
         <div class="metric-grid compact"><article class="metric-card"><span class="metric-label">ACTIVE MEMBERS</span><strong id="approvedCount">0</strong></article><article class="metric-card"><span class="metric-label">PENDING APPROVAL</span><strong id="pendingCount">0</strong></article><article class="metric-card"><span class="metric-label">TOTAL BALANCE</span><strong id="membersBalance">₹0.00</strong></article></div>
         <article class="panel"><div class="panel-head"><div><span class="eyebrow">PLAYER DIRECTORY</span><h3>All members</h3></div><div class="btn-row"><label class="inline-check"><input type="checkbox" id="showInactive"> Show inactive</label><button class="text-btn" id="refreshMembers">↻ Refresh</button></div></div><div id="membersTable" class="table-wrap"><div class="empty">Loading members…</div></div></article>
       </section>
 
-      <!-- Wallet -->
+      <!-- Kiddy Bank -->
       <section id="page-wallet" class="page">
         <div class="section-intro"><div><span class="eyebrow">KIDDY BANK</span><h2>Your money, clearly tracked.</h2><p class="muted">Every top-up, match charge and adjustment has a ledger entry.</p></div><div class="btn-row"><button class="btn ghost" id="refreshWallet">↻ Refresh</button><button class="btn primary" data-goto="deposits">↧ Request deposit</button></div></div>
         <div class="wallet-hero"><div><span class="eyebrow">AVAILABLE BALANCE</span><div class="wallet-amount" id="walletBalance">₹0.00</div><p>Only admin-confirmed transactions can add or deduct funds.</p></div><div class="wallet-symbol">₹</div></div>
@@ -145,19 +161,32 @@
         </div>
       </section>
 
-      <!-- Matches -->
+      <!-- Fixtures / Matches -->
       <section id="page-matches" class="page">
-        <div class="section-intro"><div><span class="eyebrow">MATCH CENTER</span><h2>Matches & attendance</h2><p class="muted">Create a match, mark who played, then settle the turf bill.</p></div><button class="btn primary admin-only" id="newMatchBtn">＋ New match</button></div>
+        <div class="section-intro"><div><span class="eyebrow">FIXTURES</span><h2>Matches & line-ups</h2><p class="muted">Propose a match, vote, pick teams, play, score, settle.</p></div><div class="btn-row"><div class="seg" id="matchFilter"><button class="seg-btn active" data-mfilter="upcoming">Upcoming</button><button class="seg-btn" data-mfilter="history">History</button><button class="seg-btn" data-mfilter="all">All</button></div><button class="btn primary admin-only" id="newMatchBtn">＋ New match</button></div></div>
         <div id="matchList" class="match-grid"><div class="empty">Loading matches…</div></div>
+      </section>
+
+      <!-- Live scoreboard -->
+      <section id="page-live" class="page">
+        <div class="section-intro"><div><span class="eyebrow">SCOREBOARD</span><h2>Live from the turf</h2><p class="muted">Scores update on every ball for everyone in the stadium.</p></div><button class="btn ghost" id="refreshLive">↻ Refresh</button></div>
+        <div id="liveBoards"><div class="empty">No match is live right now. Captains or the admin can start one from Fixtures once the team sheet is locked.</div></div>
+      </section>
+
+      <!-- Dressing room / chat -->
+      <section id="page-chat" class="page">
+        <div class="section-intro"><div><span class="eyebrow">DRESSING ROOM</span><h2>Club chat</h2><p class="muted">Decide timings, venues and amounts together — like the WhatsApp group, but inside the stadium.</p></div></div>
+        <article class="panel chat-panel"><div id="chatList" class="chat-list"><div class="empty">No messages yet. Say hi!</div></div>
+          <form id="chatForm" class="chat-compose"><input id="chatInput" maxlength="2000" placeholder="Message the squad…" autocomplete="off" required><button class="btn primary" type="submit">Send</button></form></article>
       </section>
 
       <!-- Reports (admin) -->
       <section id="page-reports" class="page">
-        <div class="section-intro"><div><span class="eyebrow">CLUB INSIGHTS</span><h2>Reports & exports</h2><p class="muted">A transparent view of club collections and match expenses.</p></div><div class="btn-row"><button class="btn ghost" id="exportLedgerCsv">↓ Ledger CSV</button><button class="btn primary" id="exportCsv">↓ Summary CSV</button></div></div>
+        <div class="section-intro"><div><span class="eyebrow">CLUB INSIGHTS</span><h2>Reports & exports</h2><p class="muted">A transparent view of club collections, match expenses and results.</p></div><div class="btn-row"><button class="btn ghost" id="exportLedgerCsv">↓ Ledger CSV</button><button class="btn primary" id="exportCsv">↓ Summary CSV</button></div></div>
         <div class="metric-grid compact"><article class="metric-card"><span class="metric-label">TOTAL DEPOSITS</span><strong id="reportDeposits">₹0.00</strong></article><article class="metric-card"><span class="metric-label">MATCH EXPENSES (SETTLED)</span><strong id="reportExpenses">₹0.00</strong></article><article class="metric-card"><span class="metric-label">MATCHES PLAYED</span><strong id="reportMatches">0</strong></article></div>
         <article class="panel"><div class="panel-head"><div><span class="eyebrow">PLAYER SUMMARY</span><h3>Contribution overview</h3></div></div><div id="reportTable" class="table-wrap"></div></article>
       </section>
-      <footer class="footer">FINSTACK TURF <span>•</span> PLAY FAIR. SPLIT FAIR.</footer>
+      <footer class="footer">FINSTACK TURF STADIUM <span>•</span> PLAY FAIR. SPLIT FAIR.</footer>
     </main>
   </div>
 
@@ -168,7 +197,13 @@
 
   <dialog id="adjustDialog" class="modal"><form id="adjustForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">ADMIN ACTION</span><h3 id="adjustTitle">Wallet adjustment</h3></div><button class="icon-btn" type="button" data-close="adjustDialog">×</button></div><input type="hidden" id="adjustMemberId"><label>Adjustment type<select id="adjustType"><option value="deposit">Deposit / top-up</option><option value="credit">Refund / credit</option><option value="debit">Manual deduction</option></select></label><label>Amount (₹)<input id="adjustAmount" type="number" min="0.01" step="0.01" required></label><label>Reason<input id="adjustReason" maxlength="160" required placeholder="UPI received / correction"></label><div class="modal-actions"><button type="button" class="btn ghost" data-close="adjustDialog">Cancel</button><button class="btn primary" type="submit">Save adjustment</button></div></form></dialog>
 
-  <dialog id="matchDialog" class="modal wide"><form id="matchForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">MATCH SETUP</span><h3 id="matchDialogTitle">Create a turf match</h3></div><button class="icon-btn" type="button" data-close="matchDialog">×</button></div><input type="hidden" id="matchId"><div class="form-grid"><label>Match date<input id="matchDate" type="date" required></label><label>Turf / venue<input id="matchVenue" maxlength="120" placeholder="Finstack Turf" required></label><label>Booking cost (₹)<input id="matchCost" type="number" min="0.01" step="0.01" required placeholder="1200"></label><label>Additional expenses (₹)<input id="extraCost" type="number" min="0" step="0.01" value="0"></label></div><label>Notes<input id="matchNotes" maxlength="250" placeholder="Optional notes"></label><label class="inline-check vote-toggle add-only"><input type="checkbox" id="matchVoting" checked> Open for voting — notify every member and let them confirm if they are in</label><div id="attendanceBlock"><div class="attendance-head"><b>Select players who attended</b><span><button type="button" class="text-btn" id="selectAll">All</button> · <button type="button" class="text-btn" id="selectNone">None</button> · <span id="selectedCount">0 selected</span></span></div><div id="attendanceChoices" class="attendance-grid"></div><p class="hint" id="shareHint">The total turf and additional costs are divided equally among selected players. Absent players pay ₹0.</p></div><p class="hint hidden" id="votingHint">Everyone gets a notification and votes “I'm in” or “Can't make it”. When all have voted (or you close voting) the cost is split equally among those who are in.</p><div class="modal-actions"><button type="button" class="btn ghost" data-close="matchDialog">Cancel</button><button class="btn primary" type="submit" id="matchSubmit">Create match</button></div></form></dialog>
+  <dialog id="matchDialog" class="modal wide"><form id="matchForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">MATCH SETUP</span><h3 id="matchDialogTitle">Create a turf match</h3></div><button class="icon-btn" type="button" data-close="matchDialog">×</button></div><input type="hidden" id="matchId">
+    <div class="form-grid"><label>Match date<input id="matchDate" type="date" required></label><label>Start time<input id="matchTime" type="time"></label><label>Turf / venue<input id="matchVenue" maxlength="120" placeholder="Mansow Turf" required></label><label>Venue map link<input id="matchVenueUrl" type="url" maxlength="300" placeholder="Paste Google Maps link"></label><label>Booking cost (₹)<input id="matchCost" type="number" min="0.01" step="0.01" required placeholder="2400"></label><label>Additional expenses (₹)<input id="extraCost" type="number" min="0" step="0.01" value="0"></label><label>Overs per side<input id="matchOvers" type="number" min="1" max="50" value="10"></label><label>Notes<input id="matchNotes" maxlength="250" placeholder="Optional notes"></label></div>
+    <div class="captains-box"><div class="attendance-head"><b>Captains & team names</b><span class="muted">Captains pick their teams once the team sheet is locked</span></div><div class="form-grid"><label>Team A name<input id="teamAName" maxlength="40" placeholder="Lions"></label><label>Captain A<select id="captainA"><option value="">— choose later —</option></select></label><label>Team B name<input id="teamBName" maxlength="40" placeholder="Tigers"></label><label>Captain B<select id="captainB"><option value="">— choose later —</option></select></label></div></div>
+    <label class="inline-check vote-toggle add-only"><input type="checkbox" id="matchVoting" checked> Open for voting — notify every member and let them confirm if they are in</label>
+    <div id="attendanceBlock"><div class="attendance-head"><b>Select players who attended</b><span><button type="button" class="text-btn" id="selectAll">All</button> · <button type="button" class="text-btn" id="selectNone">None</button> · <span id="selectedCount">0 selected</span></span></div><div id="attendanceChoices" class="attendance-grid"></div><p class="hint" id="shareHint">The total turf and additional costs are divided equally among selected players. Absent players pay ₹0.</p></div>
+    <p class="hint hidden" id="votingHint">Everyone gets a notification and votes “I'm in” or “Can't make it” (with an optional suggestion). When all have voted (or you close voting) the cost is split equally among those who are in.</p>
+    <div class="modal-actions"><button type="button" class="btn ghost" data-close="matchDialog">Cancel</button><button class="btn primary" type="submit" id="matchSubmit">Create match</button></div></form></dialog>
 
   <dialog id="settleDialog" class="modal"><form id="settleForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">FINAL CHECK</span><h3>Settle this match?</h3></div><button class="icon-btn" type="button" data-close="settleDialog">×</button></div><p id="settleSummary" class="muted"></p><div id="settleShares" class="table-wrap"></div><p class="hint">This deducts each attendee's share atomically. A match can only be settled once and cannot be edited afterwards.</p><input type="hidden" id="settleMatchId"><div class="modal-actions"><button type="button" class="btn ghost" data-close="settleDialog">Cancel</button><button class="btn primary" type="submit">Confirm settlement</button></div></form></dialog>
 
@@ -178,7 +213,25 @@
 
   <dialog id="confirmDialog" class="modal"><form id="confirmForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">PLEASE CONFIRM</span><h3 id="confirmTitle">Are you sure?</h3></div><button class="icon-btn" type="button" data-close="confirmDialog">×</button></div><p id="confirmText" class="muted"></p><div class="modal-actions"><button type="button" class="btn ghost" data-close="confirmDialog">Cancel</button><button class="btn primary danger-fill" type="submit" id="confirmOk">Yes, continue</button></div></form></dialog>
 
-  <script src="js/config.js?v=3.2"></script>
-  <script src="js/app.js?v=3.2"></script>
+  <!-- Match centre: line-ups, scorecard, comments -->
+  <dialog id="centreDialog" class="modal wide centre"><div class="modal-head"><div><span class="eyebrow" id="centreEyebrow">MATCH CENTRE</span><h3 id="centreTitle">Match</h3><p class="muted" id="centreMeta"></p></div><button class="icon-btn" type="button" data-close="centreDialog">×</button></div>
+    <div class="tabs centre-tabs"><button class="tab active" data-ctab="teams">Line-ups</button><button class="tab" data-ctab="score">Scorecard</button><button class="tab" data-ctab="chat">Comments</button></div>
+    <input type="hidden" id="centreMatchId">
+    <div id="ctab-teams" class="ctab active"></div>
+    <div id="ctab-score" class="ctab"></div>
+    <div id="ctab-chat" class="ctab"><div id="centreChat" class="chat-list small"></div><form id="centreChatForm" class="chat-compose"><input id="centreChatInput" maxlength="2000" placeholder="Comment on this match…" autocomplete="off" required><button class="btn primary sm" type="submit">Send</button></form></div>
+  </dialog>
+
+  <!-- Toss / start -->
+  <dialog id="tossDialog" class="modal"><form id="tossForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">TOSS</span><h3>Start the match</h3></div><button class="icon-btn" type="button" data-close="tossDialog">×</button></div><input type="hidden" id="tossMatchId"><label>Toss won by<select id="tossWinner"></select></label><label>They chose to<select id="tossDecision"><option value="bat">Bat</option><option value="bowl">Bowl</option></select></label><p class="hint">Everyone is notified that the match is live. Score ball-by-ball or just type the totals — both work.</p><div class="modal-actions"><button type="button" class="btn ghost" data-close="tossDialog">Cancel</button><button class="btn primary" type="submit">Start match 🔴</button></div></form></dialog>
+
+  <!-- End match -->
+  <dialog id="endDialog" class="modal"><form id="endForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">FULL TIME</span><h3>End the match</h3></div><button class="icon-btn" type="button" data-close="endDialog">×</button></div><input type="hidden" id="endMatchId"><p class="muted" id="endSummary"></p><label>Winner<select id="endWinner"></select></label><label>Result text (optional)<input id="endText" maxlength="120" placeholder="e.g. Lions won by 12 runs"></label><label>Player of the match<select id="endMom"><option value="">— none —</option></select></label><div class="modal-actions"><button type="button" class="btn ghost" data-close="endDialog">Cancel</button><button class="btn primary" type="submit">Confirm result 🏆</button></div></form></dialog>
+
+  <!-- Type totals -->
+  <dialog id="totalsDialog" class="modal"><form id="totalsForm" method="dialog"><div class="modal-head"><div><span class="eyebrow">QUICK SCORE</span><h3 id="totalsTitle">Enter innings total</h3></div><button class="icon-btn" type="button" data-close="totalsDialog">×</button></div><input type="hidden" id="totalsMatchId"><input type="hidden" id="totalsInnings"><div class="form-grid"><label>Runs<input id="totalsRuns" type="number" min="0" max="999" required></label><label>Wickets<input id="totalsWkts" type="number" min="0" max="10" required></label><label>Overs (e.g. 7.3)<input id="totalsOvers" type="number" min="0" step="0.1" required></label></div><label class="inline-check"><input type="checkbox" id="totalsDone"> Innings finished</label><div class="modal-actions"><button type="button" class="btn ghost" data-close="totalsDialog">Cancel</button><button class="btn primary" type="submit">Save score</button></div></form></dialog>
+
+  <script src="js/config.js?v=4.0"></script>
+  <script src="js/app.js?v=4.0"></script>
 </body>
 </html>
